@@ -193,7 +193,7 @@ requires-dist = [
     { name = "aiohttp", specifier = "==3.14.1" },
     { name = "beautifulsoup4", specifier = "==4.15.0" },
     { name = "lxml-html-clean", specifier = "==0.4.5" },
-    { name = "mistralai", specifier = "==2.5.0" },
+    { name = "mistralai", specifier = "==2.5.1" },
     { name = "requests", specifier = "==2.34.2" },
     { name = "resend", specifier = "==2.32.2" },
 ]
@@ -423,7 +423,7 @@ wheels = [
 
 [[package]]
 name = "mistralai"
-version = "2.5.0"
+version = "2.5.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "eval-type-backport" },
@@ -435,9 +435,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c8/88/960acba5e95998b4a09998d14ff95a25ada8c96ce8670091e3bf85f25696/mistralai-2.5.0.tar.gz", hash = "sha256:b2724154f62f6505d22027cbdb414e2bb143474bb51f89dc362afb1b141d2bae", size = 504089, upload-time = "2026-06-23T17:05:22.687Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a0/3c/13b7d74e398d6e00a930247c4cc8187dda225886eccb9d01d8a858f06225/mistralai-2.5.1.tar.gz", hash = "sha256:2c1c2ac8cc3b6c8789f2a4e47235bb5491485051d751b352dfc34c8f192ec35a", size = 521469, upload-time = "2026-07-01T13:14:10.586Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/31/472fa3c766aa9b7869dceb6804344cc9945115ae2ee871258b404d0e7c84/mistralai-2.5.0-py3-none-any.whl", hash = "sha256:f29813f1c2e4c19d24707cb5f74ea5c071d106fcaa84dd856a7e4f2d36d908b2", size = 1216614, upload-time = "2026-06-23T17:05:20.819Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/9a/ec5bca319c97859240eef6937bed07853b3b5040475c8756a8ff8caf27a0/mistralai-2.5.1-py3-none-any.whl", hash = "sha256:40d840bd9336a505e7bebbdae8514b0d6162c42bd3aac8e8b5c0b2ca77063552", size = 1264631, upload-time = "2026-07-01T13:14:08.726Z" },
 ]
 
 [[package]]
