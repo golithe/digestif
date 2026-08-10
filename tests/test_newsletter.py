@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from aggregate_article_texts import aggregate_article_texts
 from format_newsletter import create_html_newsletter, format_summary, story_url
+from select_stories import select_stories
 
 
 def test_format_summary_extracts_title_and_summary():
@@ -64,6 +65,44 @@ def test_create_html_newsletter_handles_stories_without_url():
     assert "https://news.ycombinator.com/item?id=42" in html
     assert "https://lobste.rs/s/abc123" in html
     assert 'href=""' not in html
+
+
+def test_select_stories_top_mode_takes_the_highest_ranked():
+    hn = [{"title": f"hn{i}"} for i in range(5)]
+    lobsters = [{"title": f"lob{i}"} for i in range(5)]
+
+    selected_hn, selected_lobsters = select_stories(hn, lobsters, "top")
+
+    assert selected_hn == [{"title": "hn0"}]
+    assert selected_lobsters == [{"title": "lob0"}]
+
+
+def test_select_stories_random_mode_samples_up_to_five():
+    hn = [{"title": f"hn{i}"} for i in range(10)]
+    lobsters = [{"title": f"lob{i}"} for i in range(3)]
+
+    selected_hn, selected_lobsters = select_stories(hn, lobsters, "random")
+
+    assert len(selected_hn) == 5
+    assert len(selected_lobsters) == 3
+    assert all(story in hn for story in selected_hn)
+
+
+def test_select_stories_unknown_mode_falls_back_to_top():
+    # An unrecognised SELECTION_MODE used to leave the selection unbound,
+    # crashing the run with NameError.
+    hn = [{"title": "hn0"}, {"title": "hn1"}]
+    lobsters = [{"title": "lob0"}, {"title": "lob1"}]
+
+    selected_hn, selected_lobsters = select_stories(hn, lobsters, "definitely-not-real")
+
+    assert selected_hn == [{"title": "hn0"}]
+    assert selected_lobsters == [{"title": "lob0"}]
+
+
+def test_select_stories_handles_empty_sources():
+    assert select_stories([], [], "random") == ([], [])
+    assert select_stories([], [], "top") == ([], [])
 
 
 def test_aggregate_article_texts_skips_failed_requests():

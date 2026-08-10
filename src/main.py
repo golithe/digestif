@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import random
 import sys
 
 import aiohttp
@@ -11,6 +10,7 @@ from format_newsletter import create_html_newsletter
 from generate_exec_summary_mistral import generate_executive_summary_mistral
 from get_top_stories_hn import get_top_stories_hn
 from get_top_stories_lobsters import get_top_stories_lobsters
+from select_stories import select_stories
 from send_email import send_email
 
 logging.basicConfig(
@@ -35,15 +35,9 @@ async def main():
         lobsters_stories = await get_top_stories_lobsters(session)
         logger.info("Fetched %d Lobsters stories", len(lobsters_stories))
 
-    # Depending on the selection_mode, select stories
-    if selection_mode == "random":
-        selected_hn_stories = random.sample(hn_stories, min(len(hn_stories), 5))
-        selected_lobsters_stories = random.sample(
-            lobsters_stories, min(len(lobsters_stories), 5)
-        )
-    elif selection_mode == "top":
-        selected_hn_stories = hn_stories[:1]
-        selected_lobsters_stories = lobsters_stories[:1]
+    selected_hn_stories, selected_lobsters_stories = select_stories(
+        hn_stories, lobsters_stories, selection_mode
+    )
 
     logger.info(
         "Selected %d HN and %d Lobsters stories",
