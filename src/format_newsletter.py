@@ -20,6 +20,31 @@ def format_summary(text):
     return "\n\n".join(parts) if parts else text
 
 
+def story_url(story):
+    """
+    Returns the best available link for a story.
+
+    HN text posts (Ask HN, Show HN without a link, job posts) carry no 'url'
+    field at all, and Lobsters text posts carry an empty one. Both cases fall
+    back to the story's own discussion page.
+
+    Parameters:
+    story (dict): A story as returned by the HN or Lobsters API.
+
+    Returns:
+    str: A URL for the story, never empty.
+    """
+    url = story.get("url") or story.get("comments_url")
+    if url:
+        return url
+
+    story_id = story.get("id")
+    if story_id:
+        return f"https://news.ycombinator.com/item?id={story_id}"
+
+    return "https://news.ycombinator.com/"
+
+
 def create_html_newsletter(summary_hn, summary_lobsters, hn_stories, lobsters_stories):
     # Apply formatting to summaries
     summary_hn_html = f"<div class='summary'><h2>Hacker News Top Story Summary</h2><p>{format_summary(summary_hn)}</p></div>"
@@ -29,7 +54,7 @@ def create_html_newsletter(summary_hn, summary_lobsters, hn_stories, lobsters_st
     hn_links_html = (
         "<ol>"
         + "".join(
-            f'<li><a href="{story["url"]}" class="story-link">{story["title"]}</a></li>'
+            f'<li><a href="{story_url(story)}" class="story-link">{story["title"]}</a></li>'
             for story in hn_stories
         )
         + "</ol>"
@@ -37,7 +62,7 @@ def create_html_newsletter(summary_hn, summary_lobsters, hn_stories, lobsters_st
     lobsters_links_html = (
         "<ol>"
         + "".join(
-            f'<li><a href="{story["url"]}" class="story-link">{story["title"]}</a></li>'
+            f'<li><a href="{story_url(story)}" class="story-link">{story["title"]}</a></li>'
             for story in lobsters_stories
         )
         + "</ol>"
