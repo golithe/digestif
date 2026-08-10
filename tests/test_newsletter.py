@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from aggregate_article_texts import aggregate_article_texts
-from format_newsletter import create_html_newsletter, format_summary
+from format_newsletter import create_html_newsletter, format_summary, story_url
 
 
 def test_format_summary_extracts_title_and_summary():
@@ -33,6 +33,37 @@ def test_create_html_newsletter_contains_story_links():
     assert "HN Story" in html
     assert "https://example.com/lob" in html
     assert "Lob Story" in html
+
+
+def test_story_url_prefers_the_article_link():
+    story = {"url": "https://example.com/article", "id": 123}
+    assert story_url(story) == "https://example.com/article"
+
+
+def test_story_url_falls_back_to_hn_discussion_for_text_posts():
+    # Ask HN and job posts come back from the HN API with no "url" key.
+    story = {"id": 42, "title": "Ask HN: anything?"}
+    assert story_url(story) == "https://news.ycombinator.com/item?id=42"
+
+
+def test_story_url_falls_back_to_lobsters_comments_for_empty_url():
+    story = {"url": "", "comments_url": "https://lobste.rs/s/abc123", "title": "T"}
+    assert story_url(story) == "https://lobste.rs/s/abc123"
+
+
+def test_create_html_newsletter_handles_stories_without_url():
+    hn_stories = [{"id": 42, "title": "Ask HN: anything?"}]
+    lobsters_stories = [
+        {"url": "", "comments_url": "https://lobste.rs/s/abc123", "title": "Lob Text"}
+    ]
+
+    html = create_html_newsletter(
+        "Title: T\nSummary: S", "Title: T\nSummary: S", hn_stories, lobsters_stories
+    )
+
+    assert "https://news.ycombinator.com/item?id=42" in html
+    assert "https://lobste.rs/s/abc123" in html
+    assert 'href=""' not in html
 
 
 def test_aggregate_article_texts_skips_failed_requests():
