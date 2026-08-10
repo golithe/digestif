@@ -1,11 +1,24 @@
 import logging
 import os
+from functools import cache
 
 from mistralai.client import Mistral
 
 logger = logging.getLogger("newsletter.llm")
 
-client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+
+@cache
+def get_client():
+    """
+    Returns the Mistral client, built on first use and reused afterwards.
+
+    Building it lazily rather than at import time keeps this module importable
+    without credentials, so the test suite can import the whole pipeline.
+
+    Returns:
+    Mistral: The API client.
+    """
+    return Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 
 
 def generate_executive_summary_mistral(aggregated_texts):
@@ -21,7 +34,7 @@ def generate_executive_summary_mistral(aggregated_texts):
     logger.info(
         "Requesting Mistral summary (%d chars of input)...", len(aggregated_texts)
     )
-    response = client.chat.complete(
+    response = get_client().chat.complete(
         model="mistral-small-latest",
         messages=[
             {
@@ -31,6 +44,12 @@ def generate_executive_summary_mistral(aggregated_texts):
             {"role": "user", "content": aggregated_texts},
         ],
     )
-    summary = response.choices[0].message.content
+    message = response.choices[0].message
+    summary = message.content if message else None
+    if not isinstance(summary, str):
+        raise TypeError(
+            f"Expected text back from Mistral, got {type(summary).__name__}"
+        )
+
     logger.info("Mistral summary received (%d chars)", len(summary))
     return summary
