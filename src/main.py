@@ -7,10 +7,10 @@ import sys
 import aiohttp
 
 from aggregate_article_texts import aggregate_article_texts
+from format_newsletter import create_html_newsletter
 from generate_exec_summary_mistral import generate_executive_summary_mistral
 from get_top_stories_hn import get_top_stories_hn
 from get_top_stories_lobsters import get_top_stories_lobsters
-from format_newsletter import create_html_newsletter
 from send_email import send_email
 
 logging.basicConfig(

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 logger = logging.getLogger("newsletter.lobsters")
 
@@ -21,7 +21,7 @@ async def get_top_stories_lobsters(session, last_hours=12, top_n=5):
         stories = await response.json()
     logger.info("Got %d stories from Lobsters", len(stories))
 
-    current_time = datetime.now(timezone.utc)
+    current_time = datetime.now(UTC)
 
     # Convert Lobsters' created_at to datetime and filter stories
     def filter_stories(story):

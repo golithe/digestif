@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 logger = logging.getLogger("newsletter.hn")
 
@@ -25,7 +25,7 @@ async def get_top_stories_hn(session, last_hours=12, top_n=5):
     logger.info("Got %d story IDs from HN", len(story_ids))
 
     # Define the current time for comparison
-    current_time = datetime.utcnow()
+    current_time = datetime.now(UTC)
 
     async def fetch_story(story_id):
         """
@@ -41,7 +41,7 @@ async def get_top_stories_hn(session, last_hours=12, top_n=5):
             f"https://hacker-news.firebaseio.com/v0/item/{story_id}.json"
         ) as story_response:
             story = await story_response.json()
-            story_time = datetime.utcfromtimestamp(story.get("time", 0))
+            story_time = datetime.fromtimestamp(story.get("time", 0), tz=UTC)
             time_diff = current_time - story_time
             # Check if story is within the specified time frame
             if time_diff.total_seconds() <= last_hours * 3600:
