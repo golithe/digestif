@@ -1,7 +1,7 @@
 import logging
 import os
 
-from mistralai import Mistral
+from mistralai.client import Mistral
 
 logger = logging.getLogger("newsletter.llm")
 
