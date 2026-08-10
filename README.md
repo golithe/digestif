@@ -1,4 +1,4 @@
-![CI](https://github.com/janwinkler1/digestif/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/golithe/digestif/actions/workflows/ci.yml/badge.svg)
 
 # digestif
 

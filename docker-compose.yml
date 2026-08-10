@@ -6,7 +6,7 @@ services:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - RESEND_FROM=${RESEND_FROM}
-    image: ghcr.io/janwinkler1/digestif:${TAG}
+    image: ghcr.io/golithe/digestif:${TAG}
     build: .
     restart: always
     
