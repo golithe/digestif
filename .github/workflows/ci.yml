@@ -27,6 +27,9 @@ jobs:
       - name: Format (ruff)
         run: uv run ruff format --check .
 
+      - name: Types (ty)
+        run: uv run ty check
+
       - name: Format (mdformat) #TODO:Find a better way to format markdown files
         run: uv run mdformat --check README.md
 
