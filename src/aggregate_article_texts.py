@@ -41,8 +41,8 @@ def aggregate_article_texts(articles, text_limit=4000):
                 text_limit,
                 url,
             )
-        except Exception as e:
-            logger.error("Error fetching article from %s: %s", url, e)
+        except Exception:
+            logger.exception("Error fetching article from %s", url)
 
     logger.info("Aggregated %d articles", len(aggregated_texts))
     return " ".join(aggregated_texts)

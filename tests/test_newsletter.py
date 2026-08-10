@@ -1,8 +1,7 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-
-from format_newsletter import format_summary, create_html_newsletter
 from aggregate_article_texts import aggregate_article_texts
+from format_newsletter import create_html_newsletter, format_summary
 
 
 def test_format_summary_extracts_title_and_summary():
