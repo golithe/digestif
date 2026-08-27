@@ -1,4 +1,4 @@
-FROM ghcr.io/astral-sh/uv:0.12.6-trixie@sha256:89e4021122ad9f29e1ebdd69fa0324f4992f4e1ded9668d7e7022c7b06acb067
+FROM ghcr.io/astral-sh/uv:0.12.7-trixie@sha256:1ea89b6d3a9649531f8b5d8b101de92ed3ed96ab10668eccbd1afc4550cc8ec5
 
 RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/*
 
