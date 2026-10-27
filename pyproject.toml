@@ -15,7 +15,7 @@ dependencies = [
 dev = [
     "ruff==0.17.3",
     "ty==0.0.92",
-    "pytest==9.1.1",
+    "pytest==9.2.0",
     "mdformat==1.0.0",
 ]
 
