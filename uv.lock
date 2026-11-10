@@ -196,7 +196,7 @@ requires-dist = [
     { name = "lxml-html-clean", specifier = "==0.4.6" },
     { name = "mistralai", specifier = "==3.7.0" },
     { name = "requests", specifier = "==2.34.2" },
-    { name = "resend", specifier = "==2.52.0" },
+    { name = "resend", specifier = "==2.53.1" },
 ]
 
 [package.metadata.requires-dev]
@@ -674,15 +674,15 @@ wheels = [
 
 [[package]]
 name = "resend"
-version = "2.52.0"
+version = "2.53.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "requests" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fc/8c/910bcfbea3cb0265e3a47b45a697b6e36659be40ceb2594fd26a1d8ff23e/resend-2.52.0.tar.gz", hash = "sha256:64495f77b59968ac9ed9e1ebaa855c283a511852668b94a8852e2c6b16f9c1f1", size = 86371, upload-time = "2026-11-05T19:00:28.486Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/3b/9187c96343d8356813fdde7a862780d77e65747599d6880ec9f189cb7f87/resend-2.53.1.tar.gz", hash = "sha256:79aaa514f02586e09a139759466228143f0a3d175144a0c94fac21914d26cec0", size = 86541, upload-time = "2026-11-09T21:43:03.492Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/ed/a9ceb6fb55ad2d3af8c3918e564c60bd86806af2dbaa73f76dbd11177f2d/resend-2.52.0-py3-none-any.whl", hash = "sha256:b36fc4123d72f7a365ab65e5c99650ba32eca945dc20324075de34da2d49ca58", size = 126397, upload-time = "2026-11-05T19:00:27.087Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/a5/4dbd761411c77b7a077aa25d43a67fbe8dd3e93bb06eed62bfa15c45026c/resend-2.53.1-py3-none-any.whl", hash = "sha256:26112957d264739ec576ccc13665199a6df9b6325aa44220ff3ea4cc2ffd773d", size = 126549, upload-time = "2026-11-09T21:43:01.974Z" },
 ]
 
 [[package]]
