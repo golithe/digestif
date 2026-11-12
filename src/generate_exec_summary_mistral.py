@@ -7,6 +7,27 @@ from mistralai.client.utils import BackoffStrategy, RetryConfig
 
 logger = logging.getLogger("newsletter.llm")
 
+AUDIENCE = (
+    "You write a short digest for a software and ML engineer. Be concrete and "
+    "technical, name the actual techniques, numbers and trade-offs, and skip hype "
+    "and filler. "
+)
+TITLED_FORMAT = "Respond exactly as:\n\nTitle: <short title>\n\nSummary: <summary>"
+
+PROMPTS = {
+    "story": AUDIENCE
+    + "Summarise the article below in two or three sentences: what happened and "
+    "why it matters to an engineer. " + TITLED_FORMAT,
+    "paper": AUDIENCE
+    + "Summarise the research paper abstract below in two or three sentences: "
+    "the contribution in plain language, what is new compared to prior work, and "
+    "who should care. " + TITLED_FORMAT,
+    "feed": AUDIENCE
+    + "Below are several unrelated posts, each starting with '## <number>. <title>'. "
+    "For each post write one line '<number>: <its point in one sentence>'. "
+    "Output only these lines.",
+}
+
 
 @cache
 def get_client():
@@ -35,12 +56,13 @@ def get_client():
     )
 
 
-def generate_executive_summary_mistral(aggregated_texts):
+def generate_executive_summary_mistral(aggregated_texts, kind="story"):
     """
     Generates an executive summary for the given aggregated article text using Mistral.
 
     Parameters:
     aggregated_texts (str): The aggregated texts of articles.
+    kind (str): 'story', 'paper' or 'feed'; picks the prompt.
 
     Returns:
     str | None: The executive summary, or None when there was no text to summarise.
@@ -57,7 +79,7 @@ def generate_executive_summary_mistral(aggregated_texts):
         messages=[
             {
                 "role": "system",
-                "content": "Act like an Insightful Business Analyst. Please create a very concise executive summary for the story. Stick to one or two key points. Your output should be structured as follows:\n\nTitle: [Insert Title Here]\n\nSummary: [Insert Summary Here].",
+                "content": PROMPTS[kind],
             },
             {"role": "user", "content": aggregated_texts},
         ],
