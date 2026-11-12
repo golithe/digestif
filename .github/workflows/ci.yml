@@ -59,6 +59,6 @@ jobs:
         run: uv run pytest
 
       - name: Build container
-        run: docker compose build
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml build
         env:
           TAG: ci

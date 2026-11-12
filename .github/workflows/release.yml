@@ -50,6 +50,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Must run after the image push: --resolve-image-digests pins the just-pushed image by digest.
+      - name: Publish compose file
+        run: docker compose -f docker-compose.yml publish --resolve-image-digests -y "ghcr.io/golithe/digestif-compose:$TAG"
+        env:
+          TAG: ${{ steps.meta.outputs.version }}
+
       - name: Create GitHub release
         run: gh release create "$TAG" --generate-notes
         env:

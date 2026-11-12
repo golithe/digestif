@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    develop:
+      watch:
+        # The image only holds src/ and run_script.sh; the venv comes from the build stage.
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: sync
+          path: ./run_script.sh
+          target: /app/run_script.sh
+        - action: rebuild
+          path: ./uv.lock
