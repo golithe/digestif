@@ -9,4 +9,5 @@ services:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - RESEND_FROM=${RESEND_FROM}
+      - SELECTION_MODE=${SELECTION_MODE:-top}
     restart: always
