@@ -8,6 +8,7 @@ dependencies = [
     "beautifulsoup4==4.15.0",
     "requests==2.34.2",
     "mistralai==3.7.0",
+    "feedparser==6.0.14",
 ]
 
 [dependency-groups]

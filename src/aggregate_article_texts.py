@@ -10,13 +10,19 @@ MIN_ARTICLE_CHARS = 200
 BLOCKED_STATUSES = {401, 402, 403, 451}
 
 
+def with_title(article, text):
+    # The feed prompt relies on the "## <title>" markers to tell posts apart.
+    title = article.get("title")
+    return f"## {title}\n{text}" if title else text
+
+
 def aggregate_article_texts(articles, text_limit=4000, wanted=None):
     """
     Fetches and aggregates text from a list of article URLs, in order.
 
     Articles that fail to download or yield too little text are skipped, so
     passing more candidates than `wanted` lets paywalled stories fall through
-    to the next one. Articles that already carry a 'text' are not downloaded.
+    to the next one. Articles that already carry enough 'text' are not downloaded.
 
     Parameters:
     articles (list): Dictionaries with the 'url' and optionally the 'text' of an article.
@@ -34,9 +40,11 @@ def aggregate_article_texts(articles, text_limit=4000, wanted=None):
         if wanted is not None and len(aggregated_texts) >= wanted:
             break
         url = article.get("url", "unknown")
-        if article.get("text"):
-            aggregated_texts.append(article["text"][:text_limit])
-            logger.info("Using provided text (%d chars): %s", len(article["text"]), url)
+        # A feed teaser is too short to summarise, so those articles are downloaded.
+        provided = article.get("text") or ""
+        if len(provided) >= MIN_ARTICLE_CHARS:
+            aggregated_texts.append(with_title(article, provided[:text_limit]))
+            logger.info("Using provided text (%d chars): %s", len(provided), url)
             continue
         try:
             logger.info("Downloading article: %s", url)
@@ -57,7 +65,7 @@ def aggregate_article_texts(articles, text_limit=4000, wanted=None):
                 )
                 paywalled_urls.add(url)
                 continue
-            aggregated_texts.append(text[:text_limit])
+            aggregated_texts.append(with_title(article, text[:text_limit]))
             logger.info(
                 "Parsed article (%d chars, limited to %d): %s",
                 text_len,
@@ -78,4 +86,4 @@ def aggregate_article_texts(articles, text_limit=4000, wanted=None):
             logger.exception("Error parsing article from %s", url)
 
     logger.info("Aggregated %d articles", len(aggregated_texts))
-    return " ".join(aggregated_texts), paywalled_urls
+    return "\n\n".join(aggregated_texts), paywalled_urls

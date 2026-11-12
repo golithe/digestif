@@ -344,7 +344,11 @@ def test_one_failing_source_does_not_stop_the_newsletter():
         return [{"url": "https://example.com/a", "title": "Works", "text": "x" * 300}]
 
     with (
-        patch.object(main, "SOURCES", (("Broken", broken), ("Working", working))),
+        patch.object(
+            main,
+            "SOURCES",
+            (("Broken", broken, "story"), ("Working", working, "story")),
+        ),
         patch("main.summarise", return_value="Title: T\nSummary: S"),
         patch("main.send_email") as send,
     ):
@@ -366,7 +370,7 @@ def test_all_sources_failing_raises_so_the_failure_alert_fires():
         raise RuntimeError("API down")
 
     with (
-        patch.object(main, "SOURCES", (("Broken", broken),)),
+        patch.object(main, "SOURCES", (("Broken", broken, "story"),)),
         patch("main.send_email") as send,
         pytest.raises(RuntimeError, match="Every source failed"),
     ):
@@ -386,3 +390,99 @@ def test_each_hf_day_is_sent_in_exactly_one_issue():
 
     assert completed_days(morning, 12) == [date(2026, 11, 11)]
     assert completed_days(afternoon, 12) == []
+
+
+def test_feed_items_are_filtered_to_the_window_and_stripped_of_html():
+    import asyncio
+    import time
+    from email.utils import formatdate
+
+    from get_feed_items import get_feed_items
+
+    now = time.time()
+    rss = f"""<?xml version="1.0"?><rss version="2.0"><channel><title>F</title>
+    <item><title>New</title><link>https://example.com/new</link>
+      <pubDate>{formatdate(now - 3600)}</pubDate>
+      <description>&lt;p&gt;Fresh &lt;b&gt;post&lt;/b&gt;&lt;/p&gt;</description></item>
+    <item><title>Old</title><link>https://example.com/old</link>
+      <pubDate>{formatdate(now - 48 * 3600)}</pubDate></item>
+    </channel></rss>""".encode()
+
+    response = MagicMock()
+    response.read = MagicMock(return_value=asyncio.sleep(0, rss))
+    session = MagicMock()
+    session.get.return_value.__aenter__.return_value = response
+
+    items = asyncio.run(get_feed_items(session, "https://example.com/feed"))
+
+    assert [(item["title"], item["text"]) for item in items] == [("New", "Fresh post")]
+
+
+def test_short_provided_text_falls_back_to_downloading():
+    teaser = [{"url": "https://open.example", "text": "Read more..."}]
+    pages = {"https://open.example": "Full article. " * 30}
+
+    with patch("aggregate_article_texts.requests.get", side_effect=fake_site(pages)):
+        result, _ = aggregate_article_texts(teaser)
+
+    assert result.startswith("Full article.")
+
+
+def test_feed_sections_put_each_one_line_summary_under_its_post():
+    import main
+
+    items = [
+        {"url": f"https://example.com/{i}", "title": f"Post {i}", "text": "x" * 300}
+        for i in (1, 2, 3)
+    ]
+    answer = "1: First point.\n- 3. Third point.\nSome chatter"
+
+    with patch("main.summarise", return_value=answer) as summarise:
+        section = main.build_section("Feed", items, "feed", "top")
+
+    sent_text = summarise.call_args.args[0]
+    assert "## 1. Post 1" in sent_text and "## 3. Post 3" in sent_text
+    assert [story.get("blurb") for story in section.stories] == [
+        "First point.",
+        None,
+        "Third point.",
+    ]
+    assert section.summary is None
+
+    text = create_text_newsletter([section])
+    assert "1. Post 1\n   First point.\n   https://example.com/1" in text
+    assert "2. Post 2\n   https://example.com/2" in text
+    html = create_html_newsletter([section])
+    assert "Post 1</a><br>First point.</li>" in html
+
+
+def test_each_section_kind_gets_its_own_prompt():
+    from generate_exec_summary_mistral import generate_executive_summary_mistral
+
+    with patch("generate_exec_summary_mistral.get_client") as get_client:
+        complete = get_client.return_value.chat.complete
+        complete.return_value.choices[0].message.content = "ok"
+        for kind in ("story", "paper", "feed"):
+            generate_executive_summary_mistral("text", kind)
+
+    prompts = [c.kwargs["messages"][0]["content"] for c in complete.call_args_list]
+    assert len(set(prompts)) == 3
+    assert all("engineer" in prompt for prompt in prompts)
+    assert "one line" in prompts[2]
+
+
+def test_feed_input_marks_each_post_with_its_title():
+    posts = [
+        {"url": "https://a.example", "title": "First", "text": "a " * 150},
+        {"url": "https://b.example", "title": "Second", "text": "b " * 150},
+    ]
+
+    result, _ = aggregate_article_texts(posts)
+
+    assert result.startswith("## First\na a")
+    assert "\n\n## Second\nb b" in result
+
+
+def test_one_line_per_post_summaries_keep_their_line_breaks():
+    result = format_summary("- First: a point.\n- Second: <b>another</b>.")
+    assert result == "- First: a point.<br>- Second: &lt;b&gt;another&lt;/b&gt;."

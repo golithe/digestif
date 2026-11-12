@@ -33,13 +33,33 @@ def parse_summary(text):
     return title, body
 
 
+def parse_feed_blurbs(text):
+    """
+    Reads the feed prompt's "<number>: <sentence>" lines.
+
+    Parameters:
+    text (str | None): The raw LLM answer for a feed section.
+
+    Returns:
+    dict: 1-based post number to its one-sentence summary; lines that do not
+    match are ignored, so a sloppy answer only costs those posts their blurb.
+    """
+    blurbs = {}
+    for line in (text or "").splitlines():
+        match = re.match(r"\W*(\d+)\s*[:.)]\s*(.+)", line)
+        if match:
+            blurbs[int(match.group(1))] = match.group(2).strip()
+    return blurbs
+
+
 def format_summary(text):
     title, body = parse_summary(text)
     # LLM output is shaped by scraped articles, so it must never reach the email as markup.
     parts = [f"<b>{html.escape(title)}</b>"] if title else []
     if body:
         parts.append(html.escape(body))
-    return "\n\n".join(parts)
+    # Feed summaries are one line per post, which HTML would otherwise run together.
+    return "<br>".join("<br>".join(parts).splitlines())
 
 
 def format_summary_text(text):
@@ -94,7 +114,8 @@ def story_link_html(story, paywalled_urls):
         f'<a href="{html.escape(url)}" class="story-link">{title}</a>' if url else title
     )
     label = PAYWALL_LABEL if story.get("url") in paywalled_urls else ""
-    return f"<li>{link}{label}</li>"
+    blurb = f"<br>{html.escape(story['blurb'])}" if story.get("blurb") else ""
+    return f"<li>{link}{label}{blurb}</li>"
 
 
 def section_html(section):
@@ -126,6 +147,8 @@ def story_links_text(stories, paywalled_urls):
     for number, story in enumerate(stories, start=1):
         label = " (paywall)" if story.get("url") in paywalled_urls else ""
         lines.append(f"{number}. {story.get('title', '')}{label}")
+        if story.get("blurb"):
+            lines.append(f"   {story['blurb']}")
         url = story_url(story)
         if url:
             lines.append(f"   {url}")
