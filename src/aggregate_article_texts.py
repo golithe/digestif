@@ -1,4 +1,5 @@
 import logging
+import time
 
 import requests
 from bs4 import BeautifulSoup
@@ -8,6 +9,50 @@ logger = logging.getLogger("newsletter.aggregate")
 # Paywalls and bot walls often answer 200 with a short "subscribe" stub.
 MIN_ARTICLE_CHARS = 200
 BLOCKED_STATUSES = {401, 402, 403, 451}
+
+# Stories sometimes link to datasets, videos or ISOs; the Pi must not load those.
+MAX_ARTICLE_BYTES = 2_000_000
+# requests' timeout only bounds each read, so a slow drip could otherwise run forever.
+DOWNLOAD_SECONDS = 30
+READABLE_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
+
+
+class UnreadableArticle(Exception):
+    pass
+
+
+def download_page(url):
+    """
+    Downloads a web page without ever holding more than MAX_ARTICLE_BYTES.
+
+    Parameters:
+    url (str): The article URL.
+
+    Returns:
+    bytes: The start of the page body; truncated after MAX_ARTICLE_BYTES or
+    DOWNLOAD_SECONDS, whichever comes first.
+
+    Raises:
+    requests.RequestException: The download failed.
+    UnreadableArticle: The response is not a web page (e.g. a PDF or video).
+    """
+    response = requests.get(url, timeout=10, stream=True)
+    try:
+        response.raise_for_status()
+        content_type = response.headers.get("Content-Type", "")
+        if content_type and not content_type.startswith(READABLE_TYPES):
+            raise UnreadableArticle(f"not a web page: {content_type}")
+
+        deadline = time.monotonic() + DOWNLOAD_SECONDS
+        body = bytearray()
+        for chunk in response.iter_content(64 * 1024):
+            body += chunk
+            if len(body) >= MAX_ARTICLE_BYTES or time.monotonic() > deadline:
+                logger.info("Truncated download after %d bytes: %s", len(body), url)
+                break
+        return bytes(body[:MAX_ARTICLE_BYTES])
+    finally:
+        response.close()
 
 
 def with_title(article, text):
@@ -48,14 +93,11 @@ def aggregate_article_texts(articles, text_limit=4000, wanted=None):
             continue
         try:
             logger.info("Downloading article: %s", url)
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-
-            soup = BeautifulSoup(response.text, "html.parser")
+            soup = BeautifulSoup(download_page(url), "html.parser")
             for tag in soup(["script", "style", "nav", "header", "footer", "aside"]):
                 tag.decompose()
 
-            content = soup.find("article") or soup.find("main") or soup.body
+            content = soup.find("article") or soup.find("main") or soup.body or soup
             text = content.get_text(separator=" ", strip=True) if content else ""
 
             text_len = len(text)
@@ -78,6 +120,8 @@ def aggregate_article_texts(articles, text_limit=4000, wanted=None):
             logger.warning("Skipping article (%s, HTTP %s): %s", reason, status, url)
             if status in BLOCKED_STATUSES:
                 paywalled_urls.add(url)
+        except UnreadableArticle as error:
+            logger.warning("Skipping article (%s): %s", error, url)
         except requests.RequestException as error:
             logger.warning(
                 "Skipping article (unreachable: %s): %s", type(error).__name__, url

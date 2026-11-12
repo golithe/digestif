@@ -1,4 +1,7 @@
+import io
 from unittest.mock import MagicMock, patch
+
+import requests
 
 from aggregate_article_texts import aggregate_article_texts
 from format_newsletter import (
@@ -95,15 +98,12 @@ def test_select_stories_handles_empty_sources():
 def test_aggregate_article_texts_skips_failed_requests():
     articles = [{"url": "https://example.com/1"}, {"url": "https://example.com/2"}]
 
-    def fake_get(url, timeout):
+    def fake_get(url, **kwargs):
         if "1" in url:
             raise ConnectionError("network down")
-        mock_response = MagicMock()
-        mock_response.text = (
-            f"<html><body><p>Good content {'x' * 300}</p></body></html>"
+        return page_response(
+            url, f"<html><body><p>Good content {'x' * 300}</p></body></html>"
         )
-        mock_response.raise_for_status = MagicMock()
-        return mock_response
 
     with patch("aggregate_article_texts.requests.get", side_effect=fake_get):
         result, _ = aggregate_article_texts(articles)
@@ -194,13 +194,22 @@ def test_failure_email_errors_do_not_escape(monkeypatch):
         report_failure("trace")
 
 
+def page_response(url, body, content_type="text/html; charset=utf-8", status=200):
+    response = requests.Response()
+    response.status_code = status
+    response.url = url
+    response.headers["Content-Type"] = content_type
+    response.raw = io.BytesIO(body.encode() if isinstance(body, str) else body)
+    return response
+
+
 def fake_site(pages):
-    def fake_get(url, timeout):
+    def fake_get(url, **kwargs):
         if pages[url] is None:
             raise ConnectionError("403 Forbidden")
-        response = MagicMock()
-        response.text = f"<html><body><article>{pages[url]}</article></body></html>"
-        return response
+        return page_response(
+            url, f"<html><body><article>{pages[url]}</article></body></html>"
+        )
 
     return fake_get
 
@@ -226,13 +235,8 @@ def test_aggregate_falls_through_paywalled_story_to_the_next_one():
 
 
 def test_blocked_article_logs_a_warning_without_traceback(caplog):
-    import requests
-
-    def forbidden(url, timeout):
-        response = requests.Response()
-        response.status_code = 403
-        response.url = url
-        return response
+    def forbidden(url, **kwargs):
+        return page_response(url, "", status=403)
 
     with patch("aggregate_article_texts.requests.get", side_effect=forbidden):
         aggregate_article_texts([{"url": "https://paywalled.example"}])
@@ -248,13 +252,8 @@ def test_blocked_article_logs_a_warning_without_traceback(caplog):
 
 
 def test_blocked_article_is_reported_as_paywalled():
-    import requests
-
-    def forbidden(url, timeout):
-        response = requests.Response()
-        response.status_code = 403
-        response.url = url
-        return response
+    def forbidden(url, **kwargs):
+        return page_response(url, "", status=403)
 
     with patch("aggregate_article_texts.requests.get", side_effect=forbidden):
         _, paywalled = aggregate_article_texts([{"url": "https://wsj.example/a"}])
@@ -486,3 +485,37 @@ def test_feed_input_marks_each_post_with_its_title():
 def test_one_line_per_post_summaries_keep_their_line_breaks():
     result = format_summary("- First: a point.\n- Second: <b>another</b>.")
     assert result == "- First: a point.<br>- Second: &lt;b&gt;another&lt;/b&gt;."
+
+
+def test_downloads_stop_at_the_size_cap(monkeypatch):
+    import aggregate_article_texts as module
+
+    monkeypatch.setattr(module, "MAX_ARTICLE_BYTES", 1000)
+    huge = "<html><body><article>" + "word " * 100_000 + "</article></body></html>"
+
+    with patch.object(module.requests, "get", return_value=page_response("u", huge)):
+        assert len(module.download_page("u")) == 1000
+
+
+def test_non_web_pages_are_skipped_without_downloading_them(caplog):
+    pdf = page_response("https://example.com/a.pdf", b"%PDF" * 1000, "application/pdf")
+    pdf.raw = MagicMock(wraps=pdf.raw)
+
+    with patch("aggregate_article_texts.requests.get", return_value=pdf):
+        text, paywalled = aggregate_article_texts(
+            [{"url": "https://example.com/a.pdf"}]
+        )
+
+    assert text == "" and paywalled == set()
+    pdf.raw.read.assert_not_called()
+    assert "not a web page: application/pdf" in caplog.text
+
+
+def test_plain_text_pages_are_read():
+    body = "Plain text article. " * 30
+    response = page_response("https://example.com/a.txt", body, "text/plain")
+
+    with patch("aggregate_article_texts.requests.get", return_value=response):
+        text, _ = aggregate_article_texts([{"url": "https://example.com/a.txt"}])
+
+    assert text.startswith("Plain text article.")
