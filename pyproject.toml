@@ -23,3 +23,10 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.uv]
+# Renovate's 7-day minimumReleaseAge, applied while resolving, so lock-file maintenance
+# never picks a version that would hold its PR on the stability-days check.
+exclude-newer = "7 days"
+# Direct pins already wait out Renovate's cooldown before they land here.
+exclude-newer-package = { resend = false, ruff = false, ty = false }
