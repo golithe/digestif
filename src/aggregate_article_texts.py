@@ -1,5 +1,8 @@
+import ipaddress
 import logging
+import socket
 import time
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -17,8 +20,47 @@ DOWNLOAD_SECONDS = 30
 READABLE_TYPES = ("text/html", "application/xhtml+xml", "text/plain")
 
 
+MAX_REDIRECTS = 5
+
+
 class UnreadableArticle(Exception):
     pass
+
+
+def ensure_public(url):
+    """
+    Refuses URLs that resolve to the Pi's own network.
+
+    Story links come from strangers on HN and Lobsters; without this, a link
+    to e.g. http://192.168.1.1/ would make the Pi fetch from the home LAN.
+
+    Raises:
+    UnreadableArticle: The URL is not http(s) or resolves to a non-public address.
+    requests.ConnectionError: The host name does not resolve.
+    """
+    parts = urlparse(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise UnreadableArticle(f"not an http(s) URL: {url}")
+    try:
+        infos = socket.getaddrinfo(parts.hostname, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as error:
+        raise requests.ConnectionError(error) from error
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if not address.is_global or address.is_multicast:
+            raise UnreadableArticle(f"refusing non-public address {address}")
+
+
+def get_public(url):
+    # Redirects are followed by hand so that every hop is checked, not just the first.
+    for _ in range(MAX_REDIRECTS + 1):
+        ensure_public(url)
+        response = requests.get(url, timeout=10, stream=True, allow_redirects=False)
+        if not response.is_redirect:
+            return response
+        response.close()
+        url = urljoin(url, response.headers["Location"])
+    raise UnreadableArticle("too many redirects")
 
 
 def download_page(url):
@@ -34,9 +76,10 @@ def download_page(url):
 
     Raises:
     requests.RequestException: The download failed.
-    UnreadableArticle: The response is not a web page (e.g. a PDF or video).
+    UnreadableArticle: The response is not a web page (e.g. a PDF or video),
+    or the URL or a redirect points to a non-public address.
     """
-    response = requests.get(url, timeout=10, stream=True)
+    response = get_public(url)
     try:
         response.raise_for_status()
         content_type = response.headers.get("Content-Type", "")
