@@ -67,25 +67,26 @@ def test_create_html_newsletter_handles_stories_without_url():
     assert 'href=""' not in html
 
 
-def test_select_stories_top_mode_takes_the_highest_ranked():
+def test_select_stories_top_mode_keeps_ranking_and_wants_one():
     hn = [{"title": f"hn{i}"} for i in range(5)]
     lobsters = [{"title": f"lob{i}"} for i in range(5)]
 
-    selected_hn, selected_lobsters = select_stories(hn, lobsters, "top")
+    hn_candidates, lobsters_candidates, wanted = select_stories(hn, lobsters, "top")
 
-    assert selected_hn == [{"title": "hn0"}]
-    assert selected_lobsters == [{"title": "lob0"}]
+    assert hn_candidates == hn
+    assert lobsters_candidates == lobsters
+    assert wanted == 1
 
 
-def test_select_stories_random_mode_samples_up_to_five():
+def test_select_stories_random_mode_shuffles_all_and_wants_five():
     hn = [{"title": f"hn{i}"} for i in range(10)]
     lobsters = [{"title": f"lob{i}"} for i in range(3)]
 
-    selected_hn, selected_lobsters = select_stories(hn, lobsters, "random")
+    hn_candidates, lobsters_candidates, wanted = select_stories(hn, lobsters, "random")
 
-    assert len(selected_hn) == 5
-    assert len(selected_lobsters) == 3
-    assert all(story in hn for story in selected_hn)
+    assert sorted(s["title"] for s in hn_candidates) == sorted(s["title"] for s in hn)
+    assert len(lobsters_candidates) == 3
+    assert wanted == 5
 
 
 def test_select_stories_unknown_mode_falls_back_to_top():
@@ -94,15 +95,12 @@ def test_select_stories_unknown_mode_falls_back_to_top():
     hn = [{"title": "hn0"}, {"title": "hn1"}]
     lobsters = [{"title": "lob0"}, {"title": "lob1"}]
 
-    selected_hn, selected_lobsters = select_stories(hn, lobsters, "definitely-not-real")
-
-    assert selected_hn == [{"title": "hn0"}]
-    assert selected_lobsters == [{"title": "lob0"}]
+    assert select_stories(hn, lobsters, "definitely-not-real") == (hn, lobsters, 1)
 
 
 def test_select_stories_handles_empty_sources():
-    assert select_stories([], [], "random") == ([], [])
-    assert select_stories([], [], "top") == ([], [])
+    assert select_stories([], [], "random") == ([], [], 5)
+    assert select_stories([], [], "top") == ([], [], 1)
 
 
 def test_aggregate_article_texts_skips_failed_requests():
@@ -112,12 +110,14 @@ def test_aggregate_article_texts_skips_failed_requests():
         if "1" in url:
             raise ConnectionError("network down")
         mock_response = MagicMock()
-        mock_response.text = "<html><body><p>Good content</p></body></html>"
+        mock_response.text = (
+            f"<html><body><p>Good content {'x' * 300}</p></body></html>"
+        )
         mock_response.raise_for_status = MagicMock()
         return mock_response
 
     with patch("aggregate_article_texts.requests.get", side_effect=fake_get):
-        result = aggregate_article_texts(articles)
+        result, _ = aggregate_article_texts(articles)
 
     assert "Good content" in result
 
@@ -194,3 +194,85 @@ def test_failure_email_errors_do_not_escape(monkeypatch):
     monkeypatch.setenv("NL_RECIPIENT", "me@example.com")
     with patch("alerting.send_email", side_effect=RuntimeError("resend down")):
         report_failure("trace")
+
+
+def fake_site(pages):
+    def fake_get(url, timeout):
+        if pages[url] is None:
+            raise ConnectionError("403 Forbidden")
+        response = MagicMock()
+        response.text = f"<html><body><article>{pages[url]}</article></body></html>"
+        return response
+
+    return fake_get
+
+
+def test_aggregate_falls_through_paywalled_story_to_the_next_one():
+    long_text = "Readable article. " * 30
+    pages = {
+        "https://paywalled.example": None,
+        "https://stub.example": "Subscribe to keep reading.",
+        "https://open.example": long_text,
+        "https://never-fetched.example": long_text,
+    }
+    articles = [{"url": url} for url in pages]
+
+    with patch(
+        "aggregate_article_texts.requests.get", side_effect=fake_site(pages)
+    ) as get:
+        result, paywalled = aggregate_article_texts(articles, wanted=1)
+
+    assert result == long_text.strip()
+    assert get.call_count == 3
+    assert paywalled == {"https://stub.example"}
+
+
+def test_blocked_article_logs_a_warning_without_traceback(caplog):
+    import requests
+
+    def forbidden(url, timeout):
+        response = requests.Response()
+        response.status_code = 403
+        response.url = url
+        return response
+
+    with patch("aggregate_article_texts.requests.get", side_effect=forbidden):
+        aggregate_article_texts([{"url": "https://paywalled.example"}])
+
+    [record] = [
+        r
+        for r in caplog.records
+        if r.name == "newsletter.aggregate" and r.levelname == "WARNING"
+    ]
+    assert "paywall" in record.getMessage()
+    assert "HTTP 403" in record.getMessage()
+    assert record.exc_info is None
+
+
+def test_blocked_article_is_reported_as_paywalled():
+    import requests
+
+    def forbidden(url, timeout):
+        response = requests.Response()
+        response.status_code = 403
+        response.url = url
+        return response
+
+    with patch("aggregate_article_texts.requests.get", side_effect=forbidden):
+        _, paywalled = aggregate_article_texts([{"url": "https://wsj.example/a"}])
+
+    assert paywalled == {"https://wsj.example/a"}
+
+
+def test_paywalled_stories_are_labelled_in_the_email():
+    stories = [
+        {"url": "https://wsj.example/a", "title": "Locked"},
+        {"url": "https://open.example/b", "title": "Open"},
+    ]
+
+    html = create_html_newsletter(
+        None, None, stories, [], paywalled_urls={"https://wsj.example/a"}
+    )
+
+    assert html.count("(paywall)") == 1
+    assert html.index("Locked") < html.index("(paywall)") < html.index("Open")
