@@ -174,3 +174,23 @@ def test_format_summary_escapes_llm_markup():
     assert "<a " not in result
     assert "<img" not in result
     assert result.startswith("<b>&lt;a href=")
+
+
+def test_failed_run_reports_and_exits_nonzero():
+    import main
+
+    with (
+        patch("main.main", side_effect=RuntimeError("boom")),
+        patch("main.report_failure") as report_failure,
+    ):
+        assert main.run() == 1
+
+    assert "RuntimeError: boom" in report_failure.call_args.args[0]
+
+
+def test_failure_email_errors_do_not_escape(monkeypatch):
+    from alerting import report_failure
+
+    monkeypatch.setenv("NL_RECIPIENT", "me@example.com")
+    with patch("alerting.send_email", side_effect=RuntimeError("resend down")):
+        report_failure("trace")

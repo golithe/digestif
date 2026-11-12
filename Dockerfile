@@ -1,47 +1,34 @@
-FROM ghcr.io/astral-sh/uv:0.13.7-trixie@sha256:b3bb6cbe20e27b91e47d190c1d6ddb912a8c2b0efa20a75496fd8de64ddda977
+FROM python:3.14.8-slim-trixie@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a AS builder
 
-RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /usr/local/bin/uv
 
-# Install the project into `/app`
 WORKDIR /app
 
-# Enable bytecode compilation
-ENV UV_COMPILE_BYTECODE=1
+# The venv must link against the runtime stage's interpreter, so never fetch a uv-managed one.
+ENV UV_PYTHON_DOWNLOADS=0 \
+    UV_LINK_MODE=copy \
+    UV_NO_DEV=1
 
-# Copy from the cache instead of linking since it's a mounted volume
-ENV UV_LINK_MODE=copy
-
-# Omit development dependencies
-ENV UV_NO_DEV=1
-
-# Ensure installed tools can be executed out of the box
-ENV UV_TOOL_BIN_DIR=/usr/local/bin
-
-# Install Python based on pyproject.toml requires-python
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv python install
-
-# Install the project's dependencies using the lockfile and settings
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-install-project
 
-# Then, add the rest of the project source code and install it
-# Installing separately from its dependencies allows optimal layer caching
-COPY . /app
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked
 
-# Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
+FROM python:3.14.8-slim-trixie@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a
 
-# Reset the entrypoint, don't invoke `uv`
-ENTRYPOINT []
+RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/*
 
 RUN echo "00 7,16 * * * root /bin/bash /app/run_script.sh > /proc/1/fd/1 2>&1" > /etc/cron.d/mycron \
-    && chmod 0644 /etc/cron.d/mycron \
-    && touch /var/log/cron.log
+    && chmod 0644 /etc/cron.d/mycron
+
+WORKDIR /app
+
+# Dependencies and code are separate layers so a code-only release re-pulls only a few KB.
+COPY --from=builder /app/.venv /app/.venv
+COPY run_script.sh /app/run_script.sh
+COPY src /app/src
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 CMD ["cron", "-f"]

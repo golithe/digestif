@@ -72,6 +72,11 @@ TAG=latest
 | `SELECTION_MODE` | `top` (default) or `random` |
 | `TAG` | Docker image tag to use (e.g. `latest`) |
 
+## Monitoring
+
+A failed run emails the traceback to `NL_RECIPIENT`. A run that never starts (broken cron, stopped
+container, dead Pi) sends nothing, so a missing digest is the only sign of those.
+
 ## Local tooling
 
 The only things that work locally without Docker are the dev tooling commands. These require

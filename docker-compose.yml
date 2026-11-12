@@ -1,7 +1,6 @@
 services:
   app:
     environment:
-      - UV_NO_DEV=0
       - NL_RECIPIENT=${NL_RECIPIENT}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - RESEND_API_KEY=${RESEND_API_KEY}
@@ -14,14 +13,13 @@ services:
       # Create a `watch` configuration to update the app
       # https://docs.docker.com/compose/file-watch/#compose-watch-versus-bind-mounts
       watch:
-        # Sync the working directory with the `/app` directory in the container
+        # The image only holds src/ and run_script.sh; the venv comes from the build stage.
         - action: sync
-          path: .
-          target: /app
-          # Exclude the project virtual environment — it could be for a
-          # different platform in the container
-          ignore:
-            - .venv/
+          path: ./src
+          target: /app/src
+        - action: sync
+          path: ./run_script.sh
+          target: /app/run_script.sh
 
         # Rebuild the image if dependencies change by checking uv.lock
         - action: rebuild

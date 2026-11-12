@@ -2,10 +2,12 @@ import asyncio
 import logging
 import os
 import sys
+import traceback
 
 import aiohttp
 
 from aggregate_article_texts import aggregate_article_texts
+from alerting import report_failure
 from format_newsletter import create_html_newsletter
 from generate_exec_summary_mistral import generate_executive_summary_mistral
 from get_top_stories_hn import get_top_stories_hn
@@ -73,5 +75,15 @@ async def main():
     logger.info("Newsletter sent successfully")
 
 
+def run():
+    try:
+        asyncio.run(main())
+    except Exception:
+        logger.exception("Newsletter run failed")
+        report_failure(traceback.format_exc())
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(run())
