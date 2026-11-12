@@ -10,6 +10,11 @@
   },
   "packageRules": [
     {
+      "description": "Renovate cannot age lock-file updates; uv's exclude-newer in pyproject.toml enforces the cooldown there",
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "minimumReleaseAge": null
+    },
+    {
       "matchUpdateTypes": ["lockFileMaintenance", "patch", "minor"],
       "automerge": true
     }
