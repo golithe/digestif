@@ -31,4 +31,6 @@ COPY src /app/src
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-CMD ["cron", "-f"]
+# Cron jobs start with an empty environment, so the container's is saved for run_script.sh.
+# export -p quotes values; plain `env` output breaks on spaces or <> when sourced.
+CMD ["bash", "-c", "export -p > /etc/environment && chmod 600 /etc/environment && exec cron -f"]

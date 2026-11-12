@@ -25,5 +25,3 @@ services:
         - action: rebuild
           path: ./uv.lock
 
-    command: >
-      bash -c "env > /etc/environment && cron -f"
