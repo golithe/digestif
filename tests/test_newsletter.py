@@ -120,3 +120,57 @@ def test_aggregate_article_texts_skips_failed_requests():
         result = aggregate_article_texts(articles)
 
     assert "Good content" in result
+
+
+def test_create_html_newsletter_omits_missing_summaries():
+    stories = [{"url": "https://example.com/hn", "title": "HN Story"}]
+
+    html = create_html_newsletter(None, "Title: T\nSummary: S", stories, stories)
+
+    assert "Hacker News Top Story Summary" not in html
+    assert "Lobsters Top Story Summary" in html
+    assert "https://example.com/hn" in html
+
+
+def test_summary_skips_mistral_when_there_is_no_text():
+    from generate_exec_summary_mistral import generate_executive_summary_mistral
+
+    with patch("generate_exec_summary_mistral.get_client") as get_client:
+        assert generate_executive_summary_mistral("  ") is None
+
+    get_client.assert_not_called()
+
+
+def test_summarise_returns_none_when_mistral_fails():
+    from main import summarise
+
+    with patch(
+        "main.generate_executive_summary_mistral",
+        side_effect=RuntimeError("429 Rate limit exceeded"),
+    ):
+        assert summarise("some text") is None
+
+
+def test_story_titles_and_urls_are_escaped():
+    stories = [
+        {"url": 'https://example.com/?a=1&b="x"', "title": "<script>x</script> & co"}
+    ]
+
+    html = create_html_newsletter(None, None, stories, [])
+
+    assert "<script>" not in html
+    assert "&lt;script&gt;x&lt;/script&gt; &amp; co" in html
+    assert 'href="https://example.com/?a=1&amp;b=&quot;x&quot;"' in html
+
+
+def test_story_url_rejects_non_http_schemes():
+    story = {"id": 7, "url": "javascript:alert(1)", "title": "T"}
+    assert story_url(story) == "https://news.ycombinator.com/item?id=7"
+
+
+def test_format_summary_escapes_llm_markup():
+    raw = 'Title: <a href="https://evil.example">Click</a>\n\nSummary: <img src=x> ok'
+    result = format_summary(raw)
+    assert "<a " not in result
+    assert "<img" not in result
+    assert result.startswith("<b>&lt;a href=")

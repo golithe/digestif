@@ -3,6 +3,7 @@ import os
 from functools import cache
 
 from mistralai.client import Mistral
+from mistralai.client.utils import BackoffStrategy, RetryConfig
 
 logger = logging.getLogger("newsletter.llm")
 
@@ -18,7 +19,20 @@ def get_client():
     Returns:
     Mistral: The API client.
     """
-    return Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+    return Mistral(
+        api_key=os.environ["MISTRAL_API_KEY"],
+        # The free tier rate-limits bursts; the SDK retries 429/5xx with this backoff.
+        retry_config=RetryConfig(
+            "backoff",
+            BackoffStrategy(
+                initial_interval=2_000,
+                max_interval=30_000,
+                exponent=2,
+                max_elapsed_time=120_000,
+            ),
+            retry_connection_errors=True,
+        ),
+    )
 
 
 def generate_executive_summary_mistral(aggregated_texts):
@@ -29,8 +43,12 @@ def generate_executive_summary_mistral(aggregated_texts):
     aggregated_texts (str): The aggregated texts of articles.
 
     Returns:
-    str: The executive summary of the aggregated texts.
+    str | None: The executive summary, or None when there was no text to summarise.
     """
+    if not aggregated_texts.strip():
+        logger.warning("No article text to summarise, skipping Mistral request")
+        return None
+
     logger.info(
         "Requesting Mistral summary (%d chars of input)...", len(aggregated_texts)
     )
