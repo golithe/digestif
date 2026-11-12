@@ -5,8 +5,9 @@
 A gloriously over-engineered daily newsletter digest — built to self-host on a Raspberry Pi or any
 always-on machine.
 
-It fetches top stories from [Hacker News](https://news.ycombinator.com) and
-[Lobste.rs](https://lobste.rs), scrapes the linked articles, runs them through a free tier [Mistral](https://console.mistral.ai/)
+It fetches top stories from [Hacker News](https://news.ycombinator.com),
+[Lobste.rs](https://lobste.rs) and [Hugging Face Daily Papers](https://huggingface.co/papers),
+scrapes the linked articles, runs them through a [Mistral](https://console.mistral.ai/)
 LLM to produce a short summary, formats everything into a styled HTML email and sends it via
 [Resend](https://resend.com).
 
@@ -15,8 +16,9 @@ dependencies up to date.
 
 ## What it does
 
-1. Fetches top stories from HN and Lobsters (async, naturally)
-1. Scrapes and truncates the linked article text
+1. Fetches top stories from HN (via the free [Algolia API](https://hn.algolia.com/api)), Lobsters
+   and HF Daily Papers (async, naturally)
+1. Scrapes and truncates the linked article text (papers use their abstract)
 1. Generates AI summaries via the Mistral API
 1. Formats a styled HTML newsletter
 1. Emails it to you — twice a day via cron

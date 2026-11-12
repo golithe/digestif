@@ -66,108 +66,90 @@ def story_url(story):
     """
     Returns the best available link for a story.
 
-    HN text posts (Ask HN, Show HN without a link, job posts) carry no 'url'
-    field at all, and Lobsters text posts carry an empty one. Both cases fall
-    back to the story's own discussion page.
+    Text posts (Ask HN, Lobsters text posts) have no article link, so they
+    fall back to the story's discussion page.
 
     Parameters:
-    story (dict): A story as returned by the HN or Lobsters API.
+    story (dict): A story with optional 'url' and 'comments_url'.
 
     Returns:
-    str: An http(s) URL for the story, never empty.
+    str | None: An http(s) URL for the story, or None if it has none.
     """
     for url in (story.get("url"), story.get("comments_url")):
         if url and urlparse(url).scheme in ("http", "https"):
             return url
-
-    story_id = story.get("id")
-    if story_id:
-        return f"https://news.ycombinator.com/item?id={story_id}"
-
-    return "https://news.ycombinator.com/"
+    return None
 
 
-def summary_html(heading, summary):
-    if summary is None:
-        return ""
-    return (
-        f"<div class='summary'><h2>{heading}</h2><p>{format_summary(summary)}</p></div>"
-    )
-
-
+EMPTY_SECTION = "Nothing new since the last issue."
+FAILED_SECTION = "Could not be fetched this time."
 PAYWALL_LABEL = ' <span style="color: #999; font-size: 14px;">(paywall)</span>'
+NOTE_STYLE = "color: #999;"
 
 
-def story_links_html(stories, paywalled_urls):
-    items = "".join(
-        f'<li><a href="{html.escape(story_url(story))}" class="story-link">'
-        f"{html.escape(story.get('title', ''))}</a>"
-        f"{PAYWALL_LABEL if story.get('url') in paywalled_urls else ''}</li>"
-        for story in stories
+def story_link_html(story, paywalled_urls):
+    title = html.escape(story.get("title", ""))
+    url = story_url(story)
+    link = (
+        f'<a href="{html.escape(url)}" class="story-link">{title}</a>' if url else title
     )
-    return f"<ol>{items}</ol>"
+    label = PAYWALL_LABEL if story.get("url") in paywalled_urls else ""
+    return f"<li>{link}{label}</li>"
 
 
-def create_html_newsletter(
-    summary_hn, summary_lobsters, hn_stories, lobsters_stories, paywalled_urls=()
-):
-    summary_hn_html = summary_html("Hacker News Top Story Summary", summary_hn)
-    summary_lobsters_html = summary_html("Lobsters Top Story Summary", summary_lobsters)
-    hn_links_html = story_links_html(hn_stories, paywalled_urls)
-    lobsters_links_html = story_links_html(lobsters_stories, paywalled_urls)
+def section_html(section):
+    if section.failed:
+        body = f'<p style="{NOTE_STYLE}">{FAILED_SECTION}</p>'
+    elif not section.stories:
+        body = f'<p style="{NOTE_STYLE}">{EMPTY_SECTION}</p>'
+    else:
+        summary = f"<p>{format_summary(section.summary)}</p>" if section.summary else ""
+        items = "".join(
+            story_link_html(story, section.paywalled_urls) for story in section.stories
+        )
+        body = f"{summary}<ol>{items}</ol>"
+    return (
+        f'<div class="story-section"><h2 class="story-header">'
+        f"{html.escape(section.name)}</h2>{body}</div>"
+    )
 
+
+def create_html_newsletter(sections):
+    sections_html = "".join(section_html(section) for section in sections)
     footer_html = f"""<footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc;"><p style="font-size: 14px; color: #666;">{DISCLAIMER}</p></footer>"""
 
-    newsletter_html = f"""<!DOCTYPE html><html><head><style>body {{ font-family: Arial, sans-serif; }}.exec-summary, .story-section, footer {{ margin-bottom: 20px; }}.story-header {{ font-size: 20px; color: #333; }}.story-link {{ text-decoration: none; color: #007bff; }}ol {{ padding-left: 20px; }}h2 {{ color: #333; }}p, footer p {{ margin: 10px 0; font-size: 16px; }}footer {{ font-size: 14px; color: #666; text-align: center; }}</style></head><body>{summary_hn_html}{summary_lobsters_html}<div class="story-section"><h2 class="story-header">Top Hacker News Stories</h2>{hn_links_html}</div><div class="story-section"><h2 class="story-header">Top Lobsters Stories</h2>{lobsters_links_html}</div>{footer_html}</body></html>"""
-
-    return newsletter_html
-
-
-def text_section(heading, body):
-    return f"{heading}\n{'-' * len(heading)}\n{body}"
+    return f"""<!DOCTYPE html><html><head><style>body {{ font-family: Arial, sans-serif; }}.story-section, footer {{ margin-bottom: 20px; }}.story-header {{ font-size: 20px; color: #333; }}.story-link {{ text-decoration: none; color: #007bff; }}ol {{ padding-left: 20px; }}p, footer p {{ margin: 10px 0; font-size: 16px; }}footer {{ font-size: 14px; color: #666; text-align: center; }}</style></head><body>{sections_html}{footer_html}</body></html>"""
 
 
 def story_links_text(stories, paywalled_urls):
     lines = []
     for number, story in enumerate(stories, start=1):
         label = " (paywall)" if story.get("url") in paywalled_urls else ""
-        lines.append(
-            f"{number}. {story.get('title', '')}{label}\n   {story_url(story)}"
-        )
+        lines.append(f"{number}. {story.get('title', '')}{label}")
+        url = story_url(story)
+        if url:
+            lines.append(f"   {url}")
     return "\n".join(lines)
 
 
-def create_text_newsletter(
-    summary_hn, summary_lobsters, hn_stories, lobsters_stories, paywalled_urls=()
-):
+def section_text(section):
+    if section.failed:
+        body = FAILED_SECTION
+    elif not section.stories:
+        body = EMPTY_SECTION
+    else:
+        parts = [format_summary_text(section.summary)] if section.summary else []
+        parts.append(story_links_text(section.stories, section.paywalled_urls))
+        body = "\n\n".join(parts)
+    return f"{section.name}\n{'-' * len(section.name)}\n{body}"
+
+
+def create_text_newsletter(sections):
     """
     Builds the plain-text alternative to the HTML newsletter.
 
     Returns:
     str: The same content as create_html_newsletter, as plain text.
     """
-    sections = []
-    if summary_hn is not None:
-        sections.append(
-            text_section(
-                "Hacker News Top Story Summary", format_summary_text(summary_hn)
-            )
-        )
-    if summary_lobsters is not None:
-        sections.append(
-            text_section(
-                "Lobsters Top Story Summary", format_summary_text(summary_lobsters)
-            )
-        )
-    sections.append(
-        text_section(
-            "Top Hacker News Stories", story_links_text(hn_stories, paywalled_urls)
-        )
-    )
-    sections.append(
-        text_section(
-            "Top Lobsters Stories", story_links_text(lobsters_stories, paywalled_urls)
-        )
-    )
-    sections.append(DISCLAIMER)
-    return "\n\n\n".join(sections) + "\n"
+    parts = [section_text(section) for section in sections] + [DISCLAIMER]
+    return "\n\n\n".join(parts) + "\n"

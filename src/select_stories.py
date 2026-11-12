@@ -10,9 +10,9 @@ TOP_COUNT = 1
 RANDOM_COUNT = 5
 
 
-def select_stories(hn_stories, lobsters_stories, selection_mode):
+def select_stories(stories, selection_mode):
     """
-    Orders the candidate stories to summarise from each source.
+    Orders one source's candidate stories to summarise.
 
     Every story is returned as a candidate so that unreadable (e.g. paywalled)
     articles can be skipped in favour of the next one; the caller summarises
@@ -20,12 +20,11 @@ def select_stories(hn_stories, lobsters_stories, selection_mode):
     to the default mode rather than aborting the run.
 
     Parameters:
-    hn_stories (list): Stories fetched from Hacker News.
-    lobsters_stories (list): Stories fetched from Lobsters.
+    stories (list): Stories fetched from one source, best first.
     selection_mode (str): Either 'top' or 'random'.
 
     Returns:
-    tuple: HN candidates, Lobsters candidates, and how many of each to summarise.
+    tuple: The candidates, and how many of them to summarise.
     """
     if selection_mode not in VALID_SELECTION_MODES:
         logger.warning(
@@ -36,10 +35,6 @@ def select_stories(hn_stories, lobsters_stories, selection_mode):
         selection_mode = DEFAULT_SELECTION_MODE
 
     if selection_mode == "random":
-        return (
-            random.sample(hn_stories, len(hn_stories)),
-            random.sample(lobsters_stories, len(lobsters_stories)),
-            RANDOM_COUNT,
-        )
+        return random.sample(stories, len(stories)), RANDOM_COUNT
 
-    return list(hn_stories), list(lobsters_stories), TOP_COUNT
+    return list(stories), TOP_COUNT

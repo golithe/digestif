@@ -8,6 +8,7 @@ from format_newsletter import (
     newsletter_subject,
     story_url,
 )
+from section import Section
 from select_stories import select_stories
 
 
@@ -31,26 +32,20 @@ def test_format_summary_fallback_on_unrecognised_input():
 
 
 def test_create_html_newsletter_contains_story_links():
-    hn_stories = [{"url": "https://example.com/hn", "title": "HN Story"}]
-    lobsters_stories = [{"url": "https://example.com/lob", "title": "Lob Story"}]
     html = create_html_newsletter(
-        "Title: T\nSummary: S", "Title: T\nSummary: S", hn_stories, lobsters_stories
+        [
+            Section("Hacker News", [{"url": "https://example.com/hn", "title": "HN"}]),
+            Section("Lobsters", [{"url": "https://example.com/lob", "title": "Lob"}]),
+        ]
     )
     assert "https://example.com/hn" in html
-    assert "HN Story" in html
     assert "https://example.com/lob" in html
-    assert "Lob Story" in html
+    assert html.index("Hacker News") < html.index("HN") < html.index("Lobsters")
 
 
 def test_story_url_prefers_the_article_link():
-    story = {"url": "https://example.com/article", "id": 123}
+    story = {"url": "https://example.com/article", "comments_url": "https://hn/1"}
     assert story_url(story) == "https://example.com/article"
-
-
-def test_story_url_falls_back_to_hn_discussion_for_text_posts():
-    # Ask HN and job posts come back from the HN API with no "url" key.
-    story = {"id": 42, "title": "Ask HN: anything?"}
-    assert story_url(story) == "https://news.ycombinator.com/item?id=42"
 
 
 def test_story_url_falls_back_to_lobsters_comments_for_empty_url():
@@ -59,54 +54,42 @@ def test_story_url_falls_back_to_lobsters_comments_for_empty_url():
 
 
 def test_create_html_newsletter_handles_stories_without_url():
-    hn_stories = [{"id": 42, "title": "Ask HN: anything?"}]
-    lobsters_stories = [
-        {"url": "", "comments_url": "https://lobste.rs/s/abc123", "title": "Lob Text"}
+    stories = [
+        {"url": "", "comments_url": "https://lobste.rs/s/abc123", "title": "Text"},
+        {"title": "Nowhere to link"},
     ]
 
-    html = create_html_newsletter(
-        "Title: T\nSummary: S", "Title: T\nSummary: S", hn_stories, lobsters_stories
-    )
+    html = create_html_newsletter([Section("Lobsters", stories)])
 
-    assert "https://news.ycombinator.com/item?id=42" in html
     assert "https://lobste.rs/s/abc123" in html
+    assert "<li>Nowhere to link</li>" in html
     assert 'href=""' not in html
 
 
 def test_select_stories_top_mode_keeps_ranking_and_wants_one():
-    hn = [{"title": f"hn{i}"} for i in range(5)]
-    lobsters = [{"title": f"lob{i}"} for i in range(5)]
-
-    hn_candidates, lobsters_candidates, wanted = select_stories(hn, lobsters, "top")
-
-    assert hn_candidates == hn
-    assert lobsters_candidates == lobsters
-    assert wanted == 1
+    stories = [{"title": f"s{i}"} for i in range(5)]
+    assert select_stories(stories, "top") == (stories, 1)
 
 
 def test_select_stories_random_mode_shuffles_all_and_wants_five():
-    hn = [{"title": f"hn{i}"} for i in range(10)]
-    lobsters = [{"title": f"lob{i}"} for i in range(3)]
+    stories = [{"title": f"s{i}"} for i in range(10)]
 
-    hn_candidates, lobsters_candidates, wanted = select_stories(hn, lobsters, "random")
+    candidates, wanted = select_stories(stories, "random")
 
-    assert sorted(s["title"] for s in hn_candidates) == sorted(s["title"] for s in hn)
-    assert len(lobsters_candidates) == 3
+    assert sorted(s["title"] for s in candidates) == sorted(s["title"] for s in stories)
     assert wanted == 5
 
 
 def test_select_stories_unknown_mode_falls_back_to_top():
     # An unrecognised SELECTION_MODE used to leave the selection unbound,
     # crashing the run with NameError.
-    hn = [{"title": "hn0"}, {"title": "hn1"}]
-    lobsters = [{"title": "lob0"}, {"title": "lob1"}]
-
-    assert select_stories(hn, lobsters, "definitely-not-real") == (hn, lobsters, 1)
+    stories = [{"title": "s0"}, {"title": "s1"}]
+    assert select_stories(stories, "definitely-not-real") == (stories, 1)
 
 
 def test_select_stories_handles_empty_sources():
-    assert select_stories([], [], "random") == ([], [], 5)
-    assert select_stories([], [], "top") == ([], [], 1)
+    assert select_stories([], "random") == ([], 5)
+    assert select_stories([], "top") == ([], 1)
 
 
 def test_aggregate_article_texts_skips_failed_requests():
@@ -128,14 +111,21 @@ def test_aggregate_article_texts_skips_failed_requests():
     assert "Good content" in result
 
 
-def test_create_html_newsletter_omits_missing_summaries():
+def test_sections_render_missing_summary_empty_and_failed_sources():
     stories = [{"url": "https://example.com/hn", "title": "HN Story"}]
+    sections = [
+        Section("Hacker News", stories),
+        Section("Lobsters", []),
+        Section("Hugging Face Daily Papers", [], failed=True),
+    ]
 
-    html = create_html_newsletter(None, "Title: T\nSummary: S", stories, stories)
-
-    assert "Hacker News Top Story Summary" not in html
-    assert "Lobsters Top Story Summary" in html
-    assert "https://example.com/hn" in html
+    for rendered in (
+        create_html_newsletter(sections),
+        create_text_newsletter(sections),
+    ):
+        assert "https://example.com/hn" in rendered
+        assert "Nothing new since the last issue." in rendered
+        assert "Could not be fetched this time." in rendered
 
 
 def test_summary_skips_mistral_when_there_is_no_text():
@@ -162,16 +152,18 @@ def test_story_titles_and_urls_are_escaped():
         {"url": 'https://example.com/?a=1&b="x"', "title": "<script>x</script> & co"}
     ]
 
-    html = create_html_newsletter(None, None, stories, [])
+    html = create_html_newsletter([Section("<b>HN</b>", stories)])
 
     assert "<script>" not in html
+    assert "&lt;b&gt;HN&lt;/b&gt;" in html
     assert "&lt;script&gt;x&lt;/script&gt; &amp; co" in html
     assert 'href="https://example.com/?a=1&amp;b=&quot;x&quot;"' in html
 
 
 def test_story_url_rejects_non_http_schemes():
-    story = {"id": 7, "url": "javascript:alert(1)", "title": "T"}
-    assert story_url(story) == "https://news.ycombinator.com/item?id=7"
+    story = {"url": "javascript:alert(1)", "comments_url": "https://hn/7"}
+    assert story_url(story) == "https://hn/7"
+    assert story_url({"url": "javascript:alert(1)"}) is None
 
 
 def test_format_summary_escapes_llm_markup():
@@ -275,10 +267,9 @@ def test_paywalled_stories_are_labelled_in_the_email():
         {"url": "https://wsj.example/a", "title": "Locked"},
         {"url": "https://open.example/b", "title": "Open"},
     ]
+    section = Section("HN", stories, paywalled_urls={"https://wsj.example/a"})
 
-    html = create_html_newsletter(
-        None, None, stories, [], paywalled_urls={"https://wsj.example/a"}
-    )
+    html = create_html_newsletter([section])
 
     assert html.count("(paywall)") == 1
     assert html.index("Locked") < html.index("(paywall)") < html.index("Open")
@@ -300,18 +291,20 @@ def test_text_newsletter_has_summaries_links_and_paywall_labels():
     lobsters = [{"url": "", "comments_url": "https://lobste.rs/s/x", "title": "Lob"}]
 
     text = create_text_newsletter(
-        "**Title:** Big News\n\nSummary: It happened.",
-        None,
-        hn,
-        lobsters,
-        paywalled_urls={"https://wsj.example/a"},
+        [
+            Section(
+                "Hacker News",
+                hn,
+                summary="**Title:** Big News\n\nSummary: It happened.",
+                paywalled_urls={"https://wsj.example/a"},
+            ),
+            Section("Lobsters", lobsters),
+        ]
     )
 
-    assert "Hacker News Top Story Summary" in text
-    assert "Big News\n\nIt happened." in text
-    assert "Lobsters Top Story Summary" not in text
+    assert "Hacker News\n-----------\nBig News\n\nIt happened." in text
     assert "1. Locked & <loaded> (paywall)\n   https://wsj.example/a" in text
-    assert "1. Lob\n   https://lobste.rs/s/x" in text
+    assert "Lobsters\n--------\n1. Lob\n   https://lobste.rs/s/x" in text
     assert "<" not in text.replace("<loaded>", "")
 
 
@@ -326,3 +319,70 @@ def test_send_email_sends_text_and_optional_html(monkeypatch):
     first, second = (call.args[0] for call in send.call_args_list)
     assert first["text"] == "plain" and first["html"] == "<p>rich</p>"
     assert second["text"] == "only plain" and "html" not in second
+
+
+def test_aggregate_uses_provided_text_without_downloading():
+    papers = [{"url": "https://arxiv.org/abs/1", "text": "An abstract. " * 30}]
+
+    with patch("aggregate_article_texts.requests.get") as get:
+        result, paywalled = aggregate_article_texts(papers, wanted=1)
+
+    get.assert_not_called()
+    assert result.startswith("An abstract.")
+    assert paywalled == set()
+
+
+def test_one_failing_source_does_not_stop_the_newsletter():
+    import asyncio
+
+    import main
+
+    async def broken(session):
+        raise RuntimeError("API down")
+
+    async def working(session):
+        return [{"url": "https://example.com/a", "title": "Works", "text": "x" * 300}]
+
+    with (
+        patch.object(main, "SOURCES", (("Broken", broken), ("Working", working))),
+        patch("main.summarise", return_value="Title: T\nSummary: S"),
+        patch("main.send_email") as send,
+    ):
+        asyncio.run(main.main())
+
+    html = send.call_args.kwargs["html"]
+    assert "Could not be fetched this time." in html
+    assert "https://example.com/a" in html
+
+
+def test_all_sources_failing_raises_so_the_failure_alert_fires():
+    import asyncio
+
+    import pytest
+
+    import main
+
+    async def broken(session):
+        raise RuntimeError("API down")
+
+    with (
+        patch.object(main, "SOURCES", (("Broken", broken),)),
+        patch("main.send_email") as send,
+        pytest.raises(RuntimeError, match="Every source failed"),
+    ):
+        asyncio.run(main.main())
+
+    send.assert_not_called()
+
+
+def test_each_hf_day_is_sent_in_exactly_one_issue():
+    from datetime import UTC, date, datetime
+
+    from get_daily_papers_hf import completed_days
+
+    # Cron runs at 07:00 and 16:00 Swiss time, i.e. 06:00 and 15:00 UTC in winter.
+    morning = datetime(2026, 11, 12, 6, 0, tzinfo=UTC)
+    afternoon = datetime(2026, 11, 12, 15, 0, tzinfo=UTC)
+
+    assert completed_days(morning, 12) == [date(2026, 11, 11)]
+    assert completed_days(afternoon, 12) == []

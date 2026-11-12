@@ -16,10 +16,10 @@ def aggregate_article_texts(articles, text_limit=4000, wanted=None):
 
     Articles that fail to download or yield too little text are skipped, so
     passing more candidates than `wanted` lets paywalled stories fall through
-    to the next one.
+    to the next one. Articles that already carry a 'text' are not downloaded.
 
     Parameters:
-    articles (list): A list of dictionaries, each containing the 'url' of an article.
+    articles (list): Dictionaries with the 'url' and optionally the 'text' of an article.
     text_limit (int): Maximum number of characters to include from each article.
     wanted (int | None): Stop after this many readable articles; None reads all.
 
@@ -34,6 +34,10 @@ def aggregate_article_texts(articles, text_limit=4000, wanted=None):
         if wanted is not None and len(aggregated_texts) >= wanted:
             break
         url = article.get("url", "unknown")
+        if article.get("text"):
+            aggregated_texts.append(article["text"][:text_limit])
+            logger.info("Using provided text (%d chars): %s", len(article["text"]), url)
+            continue
         try:
             logger.info("Downloading article: %s", url)
             response = requests.get(url, timeout=10)
