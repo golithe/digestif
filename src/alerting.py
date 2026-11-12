@@ -17,6 +17,6 @@ def report_failure(error_text):
     if not recipient:
         return
     try:
-        send_email("digestif run failed", error_text, recipient)
+        send_email("digestif run failed", recipient, text=error_text)
     except Exception:
         logger.exception("Could not send the failure email either")
