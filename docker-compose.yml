@@ -1,27 +1,12 @@
+# Published to GHCR as an OCI artifact on release; keep it free of build-only and local-file settings.
+name: digestif
+
 services:
   app:
+    image: ghcr.io/golithe/digestif:${TAG:-latest}
     environment:
       - NL_RECIPIENT=${NL_RECIPIENT}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - RESEND_FROM=${RESEND_FROM}
-    image: ghcr.io/golithe/digestif:${TAG}
-    build: .
     restart: always
-    
-    develop:
-      # Create a `watch` configuration to update the app
-      # https://docs.docker.com/compose/file-watch/#compose-watch-versus-bind-mounts
-      watch:
-        # The image only holds src/ and run_script.sh; the venv comes from the build stage.
-        - action: sync
-          path: ./src
-          target: /app/src
-        - action: sync
-          path: ./run_script.sh
-          target: /app/run_script.sh
-
-        # Rebuild the image if dependencies change by checking uv.lock
-        - action: rebuild
-          path: ./uv.lock
-

@@ -30,25 +30,33 @@ environment variables won't be set.
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) with the Compose plugin
-- A `.env` file in the project root (see Configuration below)
+- A `.env` file (see Configuration below)
 
-### Building and Running
+### Running a release
 
-```
-docker compose build
-docker compose up -d
-docker compose exec app python /app/src/main.py
-```
-
-That's it. The container handles everything else.
-
-### Watching for changes (dev mode)
+Each release publishes the image and the compose file to GHCR. The published compose file pins the
+image by digest, so the host needs no checkout of this repository, only the `.env`:
 
 ```
-docker compose watch
+docker compose --env-file .env -f oci://ghcr.io/golithe/digestif-compose:X.Y.Z up -d -y
+docker exec digestif-app-1 bash /app/run_script.sh   # optional: trigger a run now
 ```
 
-This syncs local changes into the container and rebuilds when `uv.lock` changes.
+`--env-file` is required: Compose does not read `.env` from the current directory for `oci://`
+files. `-y` skips the confirmation prompt about the variables it found. To update, rerun the first
+command with the new version.
+
+### Building locally and dev mode
+
+`docker-compose.dev.yml` adds the build and file-watch settings, which are not part of the published
+compose file:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml watch
+```
+
+Watch mode syncs `src/` into the container and rebuilds when `uv.lock` changes.
 
 ## Configuration
 
@@ -60,7 +68,6 @@ RESEND_API_KEY=...
 RESEND_FROM=digest@yourdomain.com
 NL_RECIPIENT=you@example.com
 SELECTION_MODE=top
-TAG=latest
 ```
 
 | Variable | Description |
@@ -70,7 +77,6 @@ TAG=latest
 | `RESEND_FROM` | Sender address (must be a verified domain in Resend) |
 | `NL_RECIPIENT` | Recipient email address |
 | `SELECTION_MODE` | `top` (default) or `random` |
-| `TAG` | Docker image tag to use (e.g. `latest`) |
 
 ## Monitoring
 
