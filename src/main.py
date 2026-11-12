@@ -3,12 +3,13 @@ import logging
 import os
 import sys
 import traceback
+from datetime import datetime
 
 import aiohttp
 
 from aggregate_article_texts import aggregate_article_texts
 from alerting import report_failure
-from format_newsletter import create_html_newsletter
+from format_newsletter import create_html_newsletter, newsletter_subject
 from generate_exec_summary_mistral import generate_executive_summary_mistral
 from get_top_stories_hn import get_top_stories_hn
 from get_top_stories_lobsters import get_top_stories_lobsters
@@ -72,7 +73,8 @@ async def main():
 
     recipient = os.environ.get("NL_RECIPIENT")
     logger.info("Sending newsletter to %s...", recipient)
-    send_email("Daily Digest with Summary", newsletter_html, recipient, html=True)
+    subject = newsletter_subject(datetime.now())
+    send_email(subject, newsletter_html, recipient, html=True)
     logger.info("Newsletter sent successfully")
 
 
