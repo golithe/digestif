@@ -1,5 +1,6 @@
 import html
 import re
+from datetime import datetime
 from urllib.parse import urlparse
 
 
@@ -20,6 +21,21 @@ def format_summary(text):
         parts.append(summary_match.group(1).strip())
 
     return "\n\n".join(parts) if parts else cleaned
+
+
+def newsletter_subject(now: datetime):
+    """
+    Returns a subject that is unique per issue, so mail clients that thread by
+    subject show each issue as its own message.
+
+    Parameters:
+    now (datetime): When the issue is sent.
+
+    Returns:
+    str: e.g. "Daily Digest – Thu 12 Nov, morning".
+    """
+    edition = "morning" if now.hour < 12 else "afternoon"
+    return f"Daily Digest – {now:%a} {now.day} {now:%b}, {edition}"
 
 
 def story_url(story):

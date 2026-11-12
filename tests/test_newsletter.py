@@ -1,7 +1,12 @@
 from unittest.mock import MagicMock, patch
 
 from aggregate_article_texts import aggregate_article_texts
-from format_newsletter import create_html_newsletter, format_summary, story_url
+from format_newsletter import (
+    create_html_newsletter,
+    format_summary,
+    newsletter_subject,
+    story_url,
+)
 from select_stories import select_stories
 
 
@@ -276,3 +281,14 @@ def test_paywalled_stories_are_labelled_in_the_email():
 
     assert html.count("(paywall)") == 1
     assert html.index("Locked") < html.index("(paywall)") < html.index("Open")
+
+
+def test_newsletter_subject_names_day_and_edition():
+    from datetime import datetime
+
+    assert newsletter_subject(datetime(2026, 11, 12, 7, 0)) == (
+        "Daily Digest – Thu 12 Nov, morning"
+    )
+    assert newsletter_subject(datetime(2026, 11, 2, 16, 0)) == (
+        "Daily Digest – Mon 2 Nov, afternoon"
+    )
