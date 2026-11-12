@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 from aggregate_article_texts import aggregate_article_texts
 from format_newsletter import (
     create_html_newsletter,
+    create_text_newsletter,
     format_summary,
     newsletter_subject,
     story_url,
@@ -292,3 +293,36 @@ def test_newsletter_subject_names_day_and_edition():
     assert newsletter_subject(datetime(2026, 11, 2, 16, 0)) == (
         "Daily Digest – Mon 2 Nov, afternoon"
     )
+
+
+def test_text_newsletter_has_summaries_links_and_paywall_labels():
+    hn = [{"url": "https://wsj.example/a", "title": "Locked & <loaded>"}]
+    lobsters = [{"url": "", "comments_url": "https://lobste.rs/s/x", "title": "Lob"}]
+
+    text = create_text_newsletter(
+        "**Title:** Big News\n\nSummary: It happened.",
+        None,
+        hn,
+        lobsters,
+        paywalled_urls={"https://wsj.example/a"},
+    )
+
+    assert "Hacker News Top Story Summary" in text
+    assert "Big News\n\nIt happened." in text
+    assert "Lobsters Top Story Summary" not in text
+    assert "1. Locked & <loaded> (paywall)\n   https://wsj.example/a" in text
+    assert "1. Lob\n   https://lobste.rs/s/x" in text
+    assert "<" not in text.replace("<loaded>", "")
+
+
+def test_send_email_sends_text_and_optional_html(monkeypatch):
+    from send_email import send_email
+
+    monkeypatch.setenv("RESEND_FROM", "digest@example.com")
+    with patch("send_email.resend.Emails.send", return_value={"id": "1"}) as send:
+        send_email("S", "me@example.com", text="plain", html="<p>rich</p>")
+        send_email("S", "me@example.com", text="only plain")
+
+    first, second = (call.args[0] for call in send.call_args_list)
+    assert first["text"] == "plain" and first["html"] == "<p>rich</p>"
+    assert second["text"] == "only plain" and "html" not in second

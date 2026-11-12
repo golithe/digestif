@@ -9,7 +9,11 @@ import aiohttp
 
 from aggregate_article_texts import aggregate_article_texts
 from alerting import report_failure
-from format_newsletter import create_html_newsletter, newsletter_subject
+from format_newsletter import (
+    create_html_newsletter,
+    create_text_newsletter,
+    newsletter_subject,
+)
 from generate_exec_summary_mistral import generate_executive_summary_mistral
 from get_top_stories_hn import get_top_stories_hn
 from get_top_stories_lobsters import get_top_stories_lobsters
@@ -62,19 +66,16 @@ async def main():
     summary_hn = summarise(aggregated_hn)
     summary_lobsters = summarise(aggregated_lobsters)
 
-    logger.info("Formatting newsletter HTML...")
-    newsletter_html = create_html_newsletter(
-        summary_hn,
-        summary_lobsters,
-        hn_stories,
-        lobsters_stories,
-        paywalled_urls=paywalled_hn | paywalled_lobsters,
-    )
+    logger.info("Formatting newsletter...")
+    newsletter_args = (summary_hn, summary_lobsters, hn_stories, lobsters_stories)
+    paywalled_urls = paywalled_hn | paywalled_lobsters
+    newsletter_html = create_html_newsletter(*newsletter_args, paywalled_urls)
+    newsletter_text = create_text_newsletter(*newsletter_args, paywalled_urls)
 
     recipient = os.environ.get("NL_RECIPIENT")
     logger.info("Sending newsletter to %s...", recipient)
     subject = newsletter_subject(datetime.now())
-    send_email(subject, newsletter_html, recipient, html=True)
+    send_email(subject, recipient, text=newsletter_text, html=newsletter_html)
     logger.info("Newsletter sent successfully")
 
 
