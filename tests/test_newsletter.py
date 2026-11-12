@@ -1,6 +1,7 @@
 import io
 from unittest.mock import MagicMock, patch
 
+import pytest
 import requests
 
 from aggregate_article_texts import aggregate_article_texts
@@ -13,6 +14,15 @@ from format_newsletter import (
 )
 from section import Section
 from select_stories import select_stories
+
+
+@pytest.fixture(autouse=True)
+def public_dns(monkeypatch):
+    # Tests must not hit real DNS; every host resolves to a public address by default.
+    monkeypatch.setattr(
+        "aggregate_article_texts.socket.getaddrinfo",
+        lambda host, port, **kwargs: [(None, None, None, "", ("93.184.215.14", 0))],
+    )
 
 
 def test_format_summary_extracts_title_and_summary():
@@ -493,8 +503,9 @@ def test_downloads_stop_at_the_size_cap(monkeypatch):
     monkeypatch.setattr(module, "MAX_ARTICLE_BYTES", 1000)
     huge = "<html><body><article>" + "word " * 100_000 + "</article></body></html>"
 
-    with patch.object(module.requests, "get", return_value=page_response("u", huge)):
-        assert len(module.download_page("u")) == 1000
+    url = "https://example.com/huge"
+    with patch.object(module.requests, "get", return_value=page_response(url, huge)):
+        assert len(module.download_page(url)) == 1000
 
 
 def test_non_web_pages_are_skipped_without_downloading_them(caplog):
@@ -519,3 +530,51 @@ def test_plain_text_pages_are_read():
         text, _ = aggregate_article_texts([{"url": "https://example.com/a.txt"}])
 
     assert text.startswith("Plain text article.")
+
+
+@pytest.mark.parametrize(
+    "address", ["192.168.1.1", "127.0.0.1", "169.254.169.254", "100.64.0.1", "::1"]
+)
+def test_links_into_private_networks_are_never_fetched(monkeypatch, caplog, address):
+    monkeypatch.setattr(
+        "aggregate_article_texts.socket.getaddrinfo",
+        lambda host, port, **kwargs: [(None, None, None, "", (address, 0))],
+    )
+
+    with patch("aggregate_article_texts.requests.get") as get:
+        text, _ = aggregate_article_texts([{"url": "http://router.example/"}])
+
+    get.assert_not_called()
+    assert text == ""
+    assert f"refusing non-public address {address}" in caplog.text
+
+
+def test_redirects_are_checked_at_every_hop(monkeypatch, caplog):
+    def resolve(host, port, **kwargs):
+        address = "10.0.0.1" if host == "internal.example" else "93.184.215.14"
+        return [(None, None, None, "", (address, 0))]
+
+    monkeypatch.setattr("aggregate_article_texts.socket.getaddrinfo", resolve)
+    hop = page_response("https://public.example/a", "", status=302)
+    hop.headers["Location"] = "http://internal.example/admin"
+
+    with patch("aggregate_article_texts.requests.get", return_value=hop) as get:
+        text, _ = aggregate_article_texts([{"url": "https://public.example/a"}])
+
+    assert get.call_count == 1
+    assert text == ""
+    assert "refusing non-public address 10.0.0.1" in caplog.text
+
+
+def test_public_redirects_are_followed():
+    hop = page_response("https://public.example/a", "", status=301)
+    hop.headers["Location"] = "/b"
+    article = page_response("https://public.example/b", "Moved here. " * 30)
+
+    with patch(
+        "aggregate_article_texts.requests.get", side_effect=[hop, article]
+    ) as get:
+        text, _ = aggregate_article_texts([{"url": "https://public.example/a"}])
+
+    assert get.call_args.args[0] == "https://public.example/b"
+    assert text.startswith("Moved here.")
