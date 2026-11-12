@@ -16,6 +16,7 @@ dev = [
     "ty==0.0.101",
     "pytest==9.2.0",
     "mdformat==1.0.0",
+    "zizmor==1.32.0",
 ]
 
 [tool.pytest.ini_options]
