@@ -21,6 +21,15 @@ logging.basicConfig(
 logger = logging.getLogger("newsletter")
 
 
+def summarise(aggregated_texts):
+    # A failed summary must not cost the whole email; the story links still go out.
+    try:
+        return generate_executive_summary_mistral(aggregated_texts)
+    except Exception:
+        logger.exception("Summary generation failed, sending newsletter without it")
+        return None
+
+
 async def main():
     logger.info("Starting newsletter generation")
     selection_mode = os.environ.get("SELECTION_MODE", "top")
@@ -49,10 +58,9 @@ async def main():
     aggregated_hn = aggregate_article_texts(selected_hn_stories)
     aggregated_lobsters = aggregate_article_texts(selected_lobsters_stories)
 
-    logger.info("Generating summaries via GPT...")
-    summary_hn = generate_executive_summary_mistral(aggregated_hn)
-    summary_lobsters = generate_executive_summary_mistral(aggregated_lobsters)
-    logger.info("Summaries generated")
+    logger.info("Generating summaries via Mistral...")
+    summary_hn = summarise(aggregated_hn)
+    summary_lobsters = summarise(aggregated_lobsters)
 
     logger.info("Formatting newsletter HTML...")
     newsletter_html = create_html_newsletter(

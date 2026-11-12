@@ -1,0 +1,10 @@
+# Keeps secrets and local state out of locally built images.
+.env
+.git
+.github
+.venv
+.claude
+.pytest_cache
+.ruff_cache
+**/__pycache__
+tests
