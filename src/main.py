@@ -15,8 +15,10 @@ from format_newsletter import (
     newsletter_subject,
 )
 from generate_exec_summary_mistral import generate_executive_summary_mistral
+from get_daily_papers_hf import get_daily_papers_hf
 from get_top_stories_hn import get_top_stories_hn
 from get_top_stories_lobsters import get_top_stories_lobsters
+from section import Section
 from select_stories import select_stories
 from send_email import send_email
 
@@ -37,40 +39,46 @@ def summarise(aggregated_texts):
         return None
 
 
+SOURCES = (
+    ("Hacker News", get_top_stories_hn),
+    ("Lobsters", get_top_stories_lobsters),
+    ("Hugging Face Daily Papers", get_daily_papers_hf),
+)
+
+
+def build_section(name, stories, selection_mode):
+    # One broken source must not cost the whole email; it shows up as unavailable.
+    if isinstance(stories, BaseException):
+        logger.error("Fetching %s failed", name, exc_info=stories)
+        return Section(name, [], failed=True)
+
+    candidates, wanted = select_stories(stories, selection_mode)
+    logger.info("%s: summarising up to %d readable stories", name, wanted)
+    text, paywalled_urls = aggregate_article_texts(candidates, wanted=wanted)
+    return Section(name, stories, summarise(text), paywalled_urls)
+
+
 async def main():
     logger.info("Starting newsletter generation")
     selection_mode = os.environ.get("SELECTION_MODE", "top")
     logger.info("Selection mode: %s", selection_mode)
 
     async with aiohttp.ClientSession() as session:
-        logger.info("Fetching stories from Hacker News...")
-        hn_stories = await get_top_stories_hn(session)
-        logger.info("Fetched %d HN stories", len(hn_stories))
+        logger.info("Fetching stories from %d sources...", len(SOURCES))
+        results = await asyncio.gather(
+            *(fetch(session) for _, fetch in SOURCES), return_exceptions=True
+        )
 
-        logger.info("Fetching stories from Lobsters...")
-        lobsters_stories = await get_top_stories_lobsters(session)
-        logger.info("Fetched %d Lobsters stories", len(lobsters_stories))
-
-    hn_candidates, lobsters_candidates, wanted = select_stories(
-        hn_stories, lobsters_stories, selection_mode
-    )
-    logger.info("Summarising up to %d readable stories per source", wanted)
-
-    logger.info("Aggregating article texts...")
-    aggregated_hn, paywalled_hn = aggregate_article_texts(hn_candidates, wanted=wanted)
-    aggregated_lobsters, paywalled_lobsters = aggregate_article_texts(
-        lobsters_candidates, wanted=wanted
-    )
-
-    logger.info("Generating summaries via Mistral...")
-    summary_hn = summarise(aggregated_hn)
-    summary_lobsters = summarise(aggregated_lobsters)
+    sections = [
+        build_section(name, stories, selection_mode)
+        for (name, _), stories in zip(SOURCES, results, strict=True)
+    ]
+    if all(section.failed for section in sections):
+        raise RuntimeError("Every source failed, not sending an empty newsletter")
 
     logger.info("Formatting newsletter...")
-    newsletter_args = (summary_hn, summary_lobsters, hn_stories, lobsters_stories)
-    paywalled_urls = paywalled_hn | paywalled_lobsters
-    newsletter_html = create_html_newsletter(*newsletter_args, paywalled_urls)
-    newsletter_text = create_text_newsletter(*newsletter_args, paywalled_urls)
+    newsletter_html = create_html_newsletter(sections)
+    newsletter_text = create_text_newsletter(sections)
 
     recipient = os.environ.get("NL_RECIPIENT")
     logger.info("Sending newsletter to %s...", recipient)
