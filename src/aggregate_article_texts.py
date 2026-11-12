@@ -5,21 +5,34 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger("newsletter.aggregate")
 
+# Paywalls and bot walls often answer 200 with a short "subscribe" stub.
+MIN_ARTICLE_CHARS = 200
+BLOCKED_STATUSES = {401, 402, 403, 451}
 
-def aggregate_article_texts(articles, text_limit=4000):
+
+def aggregate_article_texts(articles, text_limit=4000, wanted=None):
     """
-    Fetches and aggregates text from a list of article URLs.
+    Fetches and aggregates text from a list of article URLs, in order.
+
+    Articles that fail to download or yield too little text are skipped, so
+    passing more candidates than `wanted` lets paywalled stories fall through
+    to the next one.
 
     Parameters:
     articles (list): A list of dictionaries, each containing the 'url' of an article.
     text_limit (int): Maximum number of characters to include from each article.
+    wanted (int | None): Stop after this many readable articles; None reads all.
 
     Returns:
-    str: Aggregated text from all articles, up to `text_limit` characters each.
+    tuple: The aggregated text of the readable articles (up to `text_limit`
+    characters each), and the set of URLs that looked paywalled.
     """
     aggregated_texts = []
+    paywalled_urls = set()
 
     for article in articles:
+        if wanted is not None and len(aggregated_texts) >= wanted:
+            break
         url = article.get("url", "unknown")
         try:
             logger.info("Downloading article: %s", url)
@@ -34,6 +47,12 @@ def aggregate_article_texts(articles, text_limit=4000):
             text = content.get_text(separator=" ", strip=True) if content else ""
 
             text_len = len(text)
+            if text_len < MIN_ARTICLE_CHARS:
+                logger.warning(
+                    "Skipping article (paywall? only %d chars): %s", text_len, url
+                )
+                paywalled_urls.add(url)
+                continue
             aggregated_texts.append(text[:text_limit])
             logger.info(
                 "Parsed article (%d chars, limited to %d): %s",
@@ -41,8 +60,18 @@ def aggregate_article_texts(articles, text_limit=4000):
                 text_limit,
                 url,
             )
+        except requests.HTTPError as error:
+            status = error.response.status_code if error.response is not None else "?"
+            reason = "paywall/bot wall" if status in BLOCKED_STATUSES else "HTTP error"
+            logger.warning("Skipping article (%s, HTTP %s): %s", reason, status, url)
+            if status in BLOCKED_STATUSES:
+                paywalled_urls.add(url)
+        except requests.RequestException as error:
+            logger.warning(
+                "Skipping article (unreachable: %s): %s", type(error).__name__, url
+            )
         except Exception:
-            logger.exception("Error fetching article from %s", url)
+            logger.exception("Error parsing article from %s", url)
 
     logger.info("Aggregated %d articles", len(aggregated_texts))
-    return " ".join(aggregated_texts)
+    return " ".join(aggregated_texts), paywalled_urls

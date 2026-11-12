@@ -46,19 +46,16 @@ async def main():
         lobsters_stories = await get_top_stories_lobsters(session)
         logger.info("Fetched %d Lobsters stories", len(lobsters_stories))
 
-    selected_hn_stories, selected_lobsters_stories = select_stories(
+    hn_candidates, lobsters_candidates, wanted = select_stories(
         hn_stories, lobsters_stories, selection_mode
     )
-
-    logger.info(
-        "Selected %d HN and %d Lobsters stories",
-        len(selected_hn_stories),
-        len(selected_lobsters_stories),
-    )
+    logger.info("Summarising up to %d readable stories per source", wanted)
 
     logger.info("Aggregating article texts...")
-    aggregated_hn = aggregate_article_texts(selected_hn_stories)
-    aggregated_lobsters = aggregate_article_texts(selected_lobsters_stories)
+    aggregated_hn, paywalled_hn = aggregate_article_texts(hn_candidates, wanted=wanted)
+    aggregated_lobsters, paywalled_lobsters = aggregate_article_texts(
+        lobsters_candidates, wanted=wanted
+    )
 
     logger.info("Generating summaries via Mistral...")
     summary_hn = summarise(aggregated_hn)
@@ -66,7 +63,11 @@ async def main():
 
     logger.info("Formatting newsletter HTML...")
     newsletter_html = create_html_newsletter(
-        summary_hn, summary_lobsters, hn_stories, lobsters_stories
+        summary_hn,
+        summary_lobsters,
+        hn_stories,
+        lobsters_stories,
+        paywalled_urls=paywalled_hn | paywalled_lobsters,
     )
 
     recipient = os.environ.get("NL_RECIPIENT")
