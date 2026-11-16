@@ -29,7 +29,6 @@ jobs:
         with:
           persist-credentials: false
 
-
       - name: Install uv
         uses: astral-sh/setup-uv@v10.3.3
         with:
@@ -52,8 +51,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Format (mdformat) #TODO:Find a better way to format markdown files
-        run: uv run mdformat --check README.md
+      - name: Format (prettier)
+        run: npm ci --no-fund --no-audit && npx prettier --check .
 
       - name: Tests (pytest)
         run: uv run pytest
