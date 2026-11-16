@@ -73,13 +73,13 @@ NL_RECIPIENT=you@example.com
 SELECTION_MODE=top
 ```
 
-| Variable | Description |
-| --- | --- |
-| `MISTRAL_API_KEY` | Your [Mistral](https://console.mistral.ai) API key |
-| `RESEND_API_KEY` | Your [Resend](https://resend.com) API key |
-| `RESEND_FROM` | Sender address (must be a verified domain in Resend) |
-| `NL_RECIPIENT` | Recipient email address |
-| `SELECTION_MODE` | `top` (default) or `random` |
+| Variable          | Description                                          |
+| ----------------- | ---------------------------------------------------- |
+| `MISTRAL_API_KEY` | Your [Mistral](https://console.mistral.ai) API key   |
+| `RESEND_API_KEY`  | Your [Resend](https://resend.com) API key            |
+| `RESEND_FROM`     | Sender address (must be a verified domain in Resend) |
+| `NL_RECIPIENT`    | Recipient email address                              |
+| `SELECTION_MODE`  | `top` (default) or `random`                          |
 
 ## Monitoring
 
@@ -89,13 +89,18 @@ container, dead Pi) sends nothing, so a missing digest is the only sign of those
 ## Local tooling
 
 The only things that work locally without Docker are the dev tooling commands. These require
-[uv](https://docs.astral.sh/uv/getting-started/installation/) to be installed.
+[uv](https://docs.astral.sh/uv/getting-started/installation/) and, for Prettier,
+[Node.js](https://nodejs.org/) to be installed.
 
 ### Formatting and linting
+
+Python goes through ruff, Markdown, JSON and YAML through Prettier (pinned in `package.json`):
 
 ```
 uv run ruff format
 uv run ruff check --fix
+npm ci
+npx prettier --write .
 ```
 
 ### Tests
